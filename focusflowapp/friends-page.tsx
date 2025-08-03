@@ -7,6 +7,9 @@ import { useAuth } from "@/contexts/AuthContext";
 import { db } from '@/lib/firebase';
 import { doc, getDoc } from "firebase/firestore";
 import { Badge } from '@/components/ui/badge';
+import { Button } from "@/components/ui/button";
+import { UserPlus, UserCheck } from 'lucide-react';
+
 
 
 
@@ -18,8 +21,15 @@ Level of Education & College Institution
 
 
 Work to be done:
-Implement Neo4J in order for "suggested friends" to be implemented (friends of friends are in suggested friends)
-Implement search option to look for friends based on username
+> Implement Neo4J in order for "suggested friends" to be implemented (friends of friends are in suggested friends)
+
+> Implement search option to look for friends based on username
+
+> Implement "sent friend requests" and "pending friend requests" (already displayed under profile picture, where you can accept or decline requests)
+(You can also remove a friend, which will remove the connection between you and the other user)
+(You can withdraw a sent friend request, which will remove the "sent_request" connection between you and the other user)
+
+
 
 Study Groups (What is needed and its function)
 > You can join a public study group if one of its members is a connection
@@ -76,11 +86,26 @@ const Avatar = ({ src, alt }: { src: string | null | undefined, alt: string }) =
     />
 );
 
+interface SuggestedUser {
+  userId: string;
+  username: string;
+}
+
+interface FriendRequest {
+  userId: string;
+  username: string;
+}
+
 export default function FriendsPage(
 ){
-    const {user} = useAuth();
+    const { user } = useAuth();
     const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
     const [educationLevel, setEducationLevel] = useState<string>('');
+    const [suggestedUsers, setSuggestedUsers] =  useState<SuggestedUser[]>([]);
+    const [requests, setRequests] = useState<FriendRequest[]>([]);
+
+    const [loading, setLoading] = useState(false);
+
     
       useEffect(() => {
         const fetchUserData = async () => {
@@ -95,7 +120,79 @@ export default function FriendsPage(
           }
         };
         fetchUserData();
+
+        setLoading(true);
+        const fetchSuggestedUsers = async () => {
+          if (!user) return;
+          try {
+            const response = await fetch('/api/users/suggested', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ currentUserId: user.uid }),
+            });
+            const data = await response.json();
+            setSuggestedUsers(data);
+          } catch (error) {
+            console.error("Failed to display suggestions:", error);
+          }
+          setLoading(false);
+        };
+        fetchSuggestedUsers();
+
+        const fetchFriendRequests = async () => {
+        if (!user) return;
+        try {
+            const response = await fetch('/api/friends/pending-requests', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ currentUserId: user.uid }),
+            });
+            const data = await response.json();
+            setRequests(data);
+        } catch (error) {
+            console.error("Failed to fetch friend requests:", error);
+        }
+    };
+    fetchFriendRequests();
       }, [user]);
+
+
+    const handleSendRequest = async (targetUserId: string) => {
+    if (!user) return;
+    try {
+      await fetch('/api/friends/request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          currentUserId: user.uid,
+          targetUserId: targetUserId,
+        }),
+      });
+
+      setSuggestedUsers(prev => prev.filter(u => u.userId !== targetUserId));
+        } catch (error) {
+        console.error("Failed to send friend request:", error);
+        }
+    };
+
+    const handleAcceptRequest = async (requestUserId: string) => {
+    if (!user) return;
+    try {   
+        await fetch('/api/friends/accept', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          currentUserId: user.uid,
+          requestUserId: requestUserId,
+        }),
+      });
+      setRequests(prev => prev.filter(req => req.userId !== requestUserId));
+    } catch (error) {
+      console.error("Failed to accept friend request:", error);
+    }
+  };
+
+
 
     return(
     
@@ -108,7 +205,7 @@ export default function FriendsPage(
                     {user ? (
                         <div>
                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-4">
-                                <Card className = "bg-white border-0 shadow-lg">
+                                <Card className = "bg-white border-0 shadow-lg h-120">
                                     <CardHeader>
                                         <CardTitle className = "text-center ">
                                             Visible Profile
@@ -128,21 +225,58 @@ export default function FriendsPage(
                                                     <Badge key={interest} variant="secondary">{interest}</Badge>
                                                     ))}
                                                     </div>
-                                                    
+                                
                                                 </div>
                                             </div>
-                                    </CardContent>
-                                </Card>
-                                <Card className = "bg-white border-0 shadow-lg">
-                                    <CardHeader>
-                                        <CardTitle className = "text-center">
-                                            Suggested Friends
-                                        </CardTitle>
-                                    </CardHeader>
-                                    <CardContent>
+
+                                            <CardTitle className="text-center">
+                                                    Pending Friend Requests
+                                            </CardTitle>
+
+                                            {requests.length === 0 ? (
+                                            <p className="text-sm text-gray-500 mt-4">No new requests.</p>
+                                            ) : (
+                                            <div className="space-y-4">
+                                            {requests.map((request) => (
+                                                <div key={request.userId} className="flex items-center justify-between mt-4">
+                                                    <span>{request.username}</span>
+                                                    <Button size="sm" onClick={() => handleAcceptRequest(request.userId)}>
+                                                        <UserCheck className="w-4 h-4 mr-2" />
+                                                        Accept
+                                                    </Button>
+                                                </div>
+                                            ))}
+                                            </div>
+                                            )}
+
 
                                     </CardContent>
                                 </Card>
+
+                                <div className="grid grid-cols-1 gap-2">           
+                                    <Card className = "bg-white border-0 shadow-lg">
+                                        <CardHeader>
+                                            <CardTitle className = "text-center">
+                                                Suggested Friends
+                                            </CardTitle>
+                                        </CardHeader>
+                                        <CardContent>
+                                          <div className="space-y-4">
+                                            {loading && <p className="text-center text-gray-500">Loading suggestions...</p>}
+                                            {suggestedUsers.map((suggestedUser) => (
+                                              <div key={suggestedUser.userId} className="flex items-center justify-between">
+                                                <span>{suggestedUser.username}</span>
+                                                <Button size="sm" onClick={() => handleSendRequest(suggestedUser.userId)}>
+                                                  <UserPlus className="w-4 h-4 mr-2" />
+                                                  Add Friend
+                                                </Button>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        </CardContent>
+                                    </Card>
+
+                                </div>
                             </div>
                             <Card className = "bg-white border-0 shadow-lg">
                                     <CardHeader>

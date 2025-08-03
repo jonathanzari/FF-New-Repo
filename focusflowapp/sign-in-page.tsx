@@ -136,8 +136,17 @@ export default function SignInPage({
           username: username,
           email: user.email,
         });
-
-        // Exits with login success
+        
+        await fetch('/api/users/create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: user.uid,
+            username: username,
+            email: user.email,
+          }),
+        });
+        
         onLoginSuccess();
       }
       catch (err: any) {
