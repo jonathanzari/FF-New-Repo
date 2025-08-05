@@ -39,6 +39,8 @@ export default function TimerPage({ settings, currentTheme, onSessionComplete }:
   const [newTaskText, setNewTaskText] = useState("");
   const [showAddInput, setShowAddInput] = useState(false);
 
+  const audioElement = new Audio('/notification.mp3');
+  
   const modes = {
     Pomodoro: settings.pomodoroDuration * 60,
     "Short Break": settings.shortBreakDuration * 60,
@@ -68,6 +70,10 @@ export default function TimerPage({ settings, currentTheme, onSessionComplete }:
   }, [settings, selectedMode]);
 
   const completeSession = () => {
+
+    var sessionCount = 0;
+
+    // Session is logged
     const session = {
       id: Date.now(),
       date: new Date().toISOString(),
@@ -75,7 +81,26 @@ export default function TimerPage({ settings, currentTheme, onSessionComplete }:
       duration: modes[selectedMode as keyof typeof modes],
       completed: true,
     };
+    // Play notification sound
+    audioElement.currentTime = 0; // Reset audio to start
+    audioElement.volume = settings.soundVolume/100; // Adjust volume based on settings
+    audioElement.loop = false; // Play sound once
+    audioElement.play();
     onSessionComplete(session);
+
+    // Automatically switch to the next mode
+    // For every two pomodoros, switch to a long break, else switch to a short break
+    if (selectedMode === "Pomodoro" && sessionCount < 2) {
+      setSelectedMode("Short Break");
+    } else if (selectedMode === "Short Break" && sessionCount < 2) {
+      setSelectedMode("Pomodoro");
+      sessionCount++;
+    } else if (selectedMode === "Pomodoro" && sessionCount >= 2) {
+      setSelectedMode("Long Break");
+      sessionCount = 0; // Reset for next cycle
+    }
+
+
   };
 
   const formatTime = (seconds: number) => {
@@ -89,7 +114,10 @@ export default function TimerPage({ settings, currentTheme, onSessionComplete }:
     setIsRunning(false);
   };
 
-  const toggleTimer = () => setIsRunning(!isRunning);
+  const toggleTimer = () => {
+    setIsRunning(!isRunning);
+  };
+
   const deleteTask = (id: number) => setTasks(tasks.filter((task) => task.id !== id));
   const toggleTask = (id: number) => setTasks(tasks.map((task) => (task.id === id ? { ...task, completed: !task.completed } : task)));
 
@@ -114,6 +142,7 @@ export default function TimerPage({ settings, currentTheme, onSessionComplete }:
 
   return (
     <div className="max-w-2xl mx-auto">
+
       <Card className="border-0 p-8 mb-6" style={{ backgroundColor: currentTheme.accent }}>
         <div className="flex justify-center gap-4 mb-8">
           {Object.keys(modes).map((mode) => (
@@ -133,6 +162,7 @@ export default function TimerPage({ settings, currentTheme, onSessionComplete }:
           <Button onClick={toggleTimer} className="bg-white hover:bg-gray-100 text-gray-800 font-bold px-12 py-3 rounded-full text-lg">
             {isRunning ? "PAUSE" : "START"}
           </Button>
+
         </div>
       </Card>
       <div className="text-center mb-6">

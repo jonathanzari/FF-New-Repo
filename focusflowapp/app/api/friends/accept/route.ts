@@ -12,7 +12,7 @@ export async function POST(request: Request) {
       MERGE (currentUser)-[:IS_FRIENDS_WITH]->(requester)
       MERGE (requester)-[:IS_FRIENDS_WITH]->(currentUser)
     `;
-
+    
     await session.run(query, { currentUserId, requestUserId });
     
     return NextResponse.json({ success: true, message: 'Friend request accepted.' });
