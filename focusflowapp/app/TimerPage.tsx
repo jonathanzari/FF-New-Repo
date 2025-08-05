@@ -14,132 +14,51 @@ Saving tasks that the user creates in the page
 
 Adding editing functionality to the tasks
 
-Adding notification sound to the timers (can be changed in settings)
-
 When a full timer session has been completed, it is tracked (if user is logged in)
+
+Need it to not reset when the user navigates away from the page
 
 */
 
 
 interface TimerPageProps {
+  timeLeft: number;
+  isRunning: boolean;
+  selectedMode: string;
+  modes: { [key: string]: number };
+  toggleTimer: () => void;
+  handleModeChange: (mode: string) => void;
   settings: AppSettings;
+  tasks: { id: number; text: string; completed: boolean }[];
+  newTaskText: string;
+  showAddInput: boolean;
+  toggleTask: (id: number) => void;
+  deleteTask: (id: number) => void;
+  addTask: () => void;
+  cancelAddTask: () => void;  
+  setNewTaskText: (text: string) => void;
+  showAddTaskInput: () => void;
   currentTheme: {
     primary: string;
     secondary: string;
     accent: string;
   };
   onSessionComplete: (session: any) => void;
-}
+} 
 
-export default function TimerPage({ settings, currentTheme, onSessionComplete }: TimerPageProps) {
-  const [selectedMode, setSelectedMode] = useState("Pomodoro");
-  const [timeLeft, setTimeLeft] = useState(settings.pomodoroDuration * 60);
-  const [isRunning, setIsRunning] = useState(false);
-  const [tasks, setTasks] = useState([{ id: 1, text: "Task #1", completed: false }]);
-  const [newTaskText, setNewTaskText] = useState("");
-  const [showAddInput, setShowAddInput] = useState(false);
+export default function TimerPage({ 
+  settings, currentTheme, onSessionComplete, timeLeft, isRunning, selectedMode, modes, toggleTimer, handleModeChange,
+   tasks, newTaskText, showAddInput, toggleTask, deleteTask, addTask, cancelAddTask, setNewTaskText, showAddTaskInput
+}: TimerPageProps) {
 
-  const audioElement = new Audio('/notification.mp3');
-  
-  const modes = {
-    Pomodoro: settings.pomodoroDuration * 60,
-    "Short Break": settings.shortBreakDuration * 60,
-    "Long Break": settings.longBreakDuration * 60,
-  };
 
-  useEffect(() => {
-    let interval: NodeJS.Timeout | null = null;
-    if (isRunning && timeLeft > 0) {
-      interval = setInterval(() => {
-        setTimeLeft((prevTime) => prevTime - 1);
-      }, 1000);
-    } else if (timeLeft === 0 && isRunning) {
-      setIsRunning(false);
-      completeSession();
-    }
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [isRunning, timeLeft]);
-
-  useEffect(() => {
-    if (!isRunning) {
-      const newTime = modes[selectedMode as keyof typeof modes];
-      setTimeLeft(newTime);
-    }
-  }, [settings, selectedMode]);
-
-  const completeSession = () => {
-
-    var sessionCount = 0;
-
-    // Session is logged
-    const session = {
-      id: Date.now(),
-      date: new Date().toISOString(),
-      type: selectedMode as "Pomodoro" | "Short Break" | "Long Break",
-      duration: modes[selectedMode as keyof typeof modes],
-      completed: true,
-    };
-    // Play notification sound
-    audioElement.currentTime = 0; // Reset audio to start
-    audioElement.volume = settings.soundVolume/100; // Adjust volume based on settings
-    audioElement.loop = false; // Play sound once
-    audioElement.play();
-    onSessionComplete(session);
-
-    // Automatically switch to the next mode
-    // For every two pomodoros, switch to a long break, else switch to a short break
-    if (selectedMode === "Pomodoro" && sessionCount < 2) {
-      setSelectedMode("Short Break");
-    } else if (selectedMode === "Short Break" && sessionCount < 2) {
-      setSelectedMode("Pomodoro");
-      sessionCount++;
-    } else if (selectedMode === "Pomodoro" && sessionCount >= 2) {
-      setSelectedMode("Long Break");
-      sessionCount = 0; // Reset for next cycle
-    } else if (selectedMode === "Long Break" && sessionCount == 0) {
-      setSelectedMode("Pomodoro");
-    }
-
-  };
-
+ 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   };
 
-  const handleModeChange = (mode: string) => {
-    setSelectedMode(mode);
-    setIsRunning(false);
-  };
-
-  const toggleTimer = () => {
-    setIsRunning(!isRunning);
-  };
-
-  const deleteTask = (id: number) => setTasks(tasks.filter((task) => task.id !== id));
-  const toggleTask = (id: number) => setTasks(tasks.map((task) => (task.id === id ? { ...task, completed: !task.completed } : task)));
-
-  const addTask = () => {
-    if (newTaskText.trim()) {
-      const newTask = {
-        id: Date.now(),
-        text: newTaskText.trim(),
-        completed: false,
-      };
-      setTasks([...tasks, newTask]);
-      setNewTaskText("");
-      setShowAddInput(false);
-    }
-  };
-
-  const showAddTaskInput = () => setShowAddInput(true);
-  const cancelAddTask = () => {
-    setNewTaskText("");
-    setShowAddInput(false);
-  };
 
   return (
     <div className="max-w-2xl mx-auto">
