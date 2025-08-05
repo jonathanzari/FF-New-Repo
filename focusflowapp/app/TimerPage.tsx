@@ -98,8 +98,9 @@ export default function TimerPage({ settings, currentTheme, onSessionComplete }:
     } else if (selectedMode === "Pomodoro" && sessionCount >= 2) {
       setSelectedMode("Long Break");
       sessionCount = 0; // Reset for next cycle
+    } else if (selectedMode === "Long Break" && sessionCount == 0) {
+      setSelectedMode("Pomodoro");
     }
-
 
   };
 
