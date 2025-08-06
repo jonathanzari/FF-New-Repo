@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import MainLayout from "@/app/MainLayout";
 import TimerPage from "@/app/TimerPage";
 import SignInPage from "./sign-in-page";
@@ -15,7 +15,6 @@ import FriendsPage from "./friends-page";
 /*
 
 Any settings being changed gets transferred over to the other pages
-
 
 
 */
@@ -46,7 +45,6 @@ export default function Home() {
   const currentTheme = colorThemes[settings.colorTheme];
 
   const [selectedMode, setSelectedMode] = useState("Pomodoro");
-  const [timeLeft, setTimeLeft] = useState(defaultSettings.pomodoroDuration * 60);
   const [isRunning, setIsRunning] = useState(false);
 
   const [tasks, setTasks] = useState([{ id: 1, text: "Task #1", completed: false }]);
@@ -55,11 +53,19 @@ export default function Home() {
 
   const audioElement = new Audio('/notification.mp3');
 
-  const modes = {
-    Pomodoro: defaultSettings.pomodoroDuration * 60,
-    "Short Break": defaultSettings.shortBreakDuration * 60,
-    "Long Break": defaultSettings.longBreakDuration * 60,
-  };
+  const modes = useMemo(() => ({
+    Pomodoro: settings.pomodoroDuration * 60,
+    "Short Break": settings.shortBreakDuration * 60,
+    "Long Break": settings.longBreakDuration * 60,
+  }), [settings]);
+
+  const [timeLeft, setTimeLeft] = useState(modes.Pomodoro);
+
+  useEffect(() => {
+    if (!isRunning) {
+      setTimeLeft(modes[selectedMode as keyof typeof modes]);
+    }
+  }, [selectedMode, settings, modes]); 
 
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null;
@@ -122,6 +128,7 @@ export default function Home() {
 
   const handleSettingsChange = (newSettings: AppSettings) => {
     setSettings(newSettings);
+    setIsRunning(false); // Stop timer when settings change
   };
 
   const addStudySession = (session: any) => {
