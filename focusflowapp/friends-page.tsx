@@ -8,7 +8,7 @@ import { db } from '@/lib/firebase';
 import { doc, getDoc } from "firebase/firestore";
 import { Badge } from '@/components/ui/badge';
 import { Button } from "@/components/ui/button";
-import { UserPlus, UserCheck } from 'lucide-react';
+import { UserPlus, UserCheck, User } from 'lucide-react';
 
 
 
@@ -78,13 +78,24 @@ ____________________ ______________________
 
 */
 
-const Avatar = ({ src, alt }: { src: string | null | undefined, alt: string }) => (
+interface Friend {
+    userId: string;
+    username: string;
+    photoURL?: string;
+}
+
+const Avatar = ({ src, alt }: { src: string | null | undefined, alt: string }) => {
+
+  const imageSrc = src || '/default-avatar.png'; 
+
+  return (
     <img
-        src={src || '/default-avatar.png'}
-        alt={''}
-        className="w-32 h-32 rounded-full object-cover border-4 border-white shadow-lg"
+        src={imageSrc}
+        alt={alt}
+        className="w-20 h-20 rounded-full object-cover"
     />
-);
+  );
+};
 
 interface SuggestedUser {
   userId: string;
@@ -96,14 +107,21 @@ interface FriendRequest {
   username: string;
 }
 
+interface AuthUser {
+    uid: string;
+    displayName?: string;
+    photoURL?: string;
+}
+
 export default function FriendsPage(
 ){
-    const { user } = useAuth();
+    const { user } = useAuth() as { user: AuthUser | null };
     const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
     const [educationLevel, setEducationLevel] = useState<string>('');
     const [suggestedUsers, setSuggestedUsers] =  useState<SuggestedUser[]>([]);
     const [requests, setRequests] = useState<FriendRequest[]>([]);
 
+    const [friends, setFriends] = useState<Friend[]>([]);
     const [loading, setLoading] = useState(false);
 
     
@@ -152,8 +170,25 @@ export default function FriendsPage(
         } catch (error) {
             console.error("Failed to fetch friend requests:", error);
         }
-    };
-    fetchFriendRequests();
+        };
+        fetchFriendRequests();
+
+        const fetchFriends = async () => {
+        if (!user) return;
+        try {
+            const response = await fetch('/api/friends', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ currentUserId: user.uid }),
+            });
+            const data = await response.json();
+            setFriends(data);
+        } catch (error) {
+            console.error("Failed to fetch friends:", error);   
+        }
+        };
+        fetchFriends();
+
       }, [user]);
 
 
@@ -212,6 +247,7 @@ export default function FriendsPage(
                                         </CardTitle>
                                     </CardHeader>
                                     <CardContent>
+                                        <Card className= "bg-white shadow-lg mb-4">
                                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                                                 <div className="text-center mb-8 flex flex-col items-center">
                                                     <Avatar src={user?.photoURL} alt={user?.displayName || 'User profile picture'}/>
@@ -219,15 +255,15 @@ export default function FriendsPage(
                                                     <Badge className="mt-2">{educationLevel}</Badge>
                                                 </div>
                                                 <div>
-                                                    <h1>Interest(s): </h1>
+                                                    <CardTitle className="mb-4">Interest(s): </CardTitle>
                                                     <div className="flex justify-center flex-wrap gap-3 mt-2 mb-2">
                                                     {selectedInterests.map(interest => (
                                                     <Badge key={interest} variant="secondary">{interest}</Badge>
                                                     ))}
                                                     </div>
-                                
                                                 </div>
                                             </div>
+                                        </Card>
 
                                             <CardTitle className="text-center">
                                                     Pending Friend Requests
@@ -236,7 +272,7 @@ export default function FriendsPage(
                                             {requests.length === 0 ? (
                                             <p className="text-sm text-gray-500 mt-4">No new requests.</p>
                                             ) : (
-                                            <div className="space-y-4">
+                                            <div className="space-y-4 overflow-y-auto">
                                             {requests.map((request) => (
                                                 <div key={request.userId} className="flex items-center justify-between mt-4">
                                                     <span>{request.username}</span>
@@ -261,7 +297,7 @@ export default function FriendsPage(
                                             </CardTitle>
                                         </CardHeader>
                                         <CardContent>
-                                          <div className="space-y-4">
+                                          <div className="space-y-4 overflow-y-auto">
                                             {loading && <p className="text-center text-gray-500">Loading suggestions...</p>}
                                             {suggestedUsers.map((suggestedUser) => (
                                               <div key={suggestedUser.userId} className="flex items-center justify-between">
@@ -272,6 +308,15 @@ export default function FriendsPage(
                                                 </Button>
                                               </div>
                                             ))}
+                                            <CardTitle className="text-center">Friends</CardTitle>
+                                            {friends.map((friend) => (
+                                            <div key={friend.userId} className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-100 overflow-y-auto">
+                                            <div className="flex items-center gap-4">
+                                            <Avatar src={friend.photoURL} alt={friend.username} />
+                                            <span className="font-medium">{friend.username}</span>
+                                            </div>
+                                            </div>
+                                        ))}
                                           </div>
                                         </CardContent>
                                     </Card>
