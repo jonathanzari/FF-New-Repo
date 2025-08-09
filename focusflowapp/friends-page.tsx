@@ -28,6 +28,8 @@ Work to be done:
 > Implement "sent friend requests" and "pending friend requests" (already displayed under profile picture, where you can accept or decline requests)
 (You can also remove a friend, which will remove the connection between you and the other user)
 (You can withdraw a sent friend request, which will remove the "sent_request" connection between you and the other user)
+(You can decline a friend request, places user back in suggested)
+(You can accept a friend request which will be automatically refreshed and be shown in friends section)
 
 
 

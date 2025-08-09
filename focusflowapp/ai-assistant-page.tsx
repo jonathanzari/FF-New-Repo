@@ -34,14 +34,14 @@ Ability to edit and delete pages in Saved Notes Section
 
 "use client";
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from '@/contexts/AuthContext';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, serverTimestamp, query, orderBy, getDocs } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, query, orderBy, getDocs, updateDoc, doc, deleteDoc } from 'firebase/firestore';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FolderPlus, Send, Bot, User, History, Plus, X, Pencil, Trash } from 'lucide-react';
 
@@ -96,13 +96,20 @@ export default function AIAssistantPage() {
   const [notes, setNotes] = useState<Note[]>([]);
   const [folders, setFolders] = useState<Folder[]>([]);
   
-  const [newNoteTitle, setNewNoteTitle] = useState('');
-  const [newNoteContent, setNewNoteContent] = useState('');
-  const [noteFolderId, setNoteFolderId] = useState<string>('');
   const [newFolderName, setNewFolderName] = useState('');
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null); // null means "All Notes"
+
+
+  const [noteTitle, setNoteTitle] = useState('');
+  const [noteContent, setNoteContent] = useState('');
+  const [noteFolderId, setNoteFolderId] = useState('');
+  const [editingNote, setEditingNote] = useState<Note | null>(null); // State to track the note being edited
+
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const noteEditorRef = useRef<HTMLDivElement | null>(null);
 
   /////////////////////////////////////////////////////////////
   // AI Assistant //
@@ -114,6 +121,7 @@ export default function AIAssistantPage() {
   const [charCount, setCharCount] = useState(0);
   const [showHistory, setShowHistory] = useState(false);
   const [history, setHistory] = useState(getHistory());
+
 
 
   const fetchFoldersAndNotes = async () => {
@@ -150,22 +158,42 @@ export default function AIAssistantPage() {
       setError("Failed to create folder.");
     }
   };
+
+  const handleDeleteFolder = async (folderId: string) => {
+    if (!user) return;
+    try {
+      await deleteDoc(doc(db, "users", user.uid, "folders", folderId));
+
+      await fetchFoldersAndNotes(); // Refresh list
+
+    } catch (err) {
+      setError("Failed to delete folder.");
+    }
+  };
   
-  const handleSaveNote = async () => {
-    if (!user || !newNoteContent.trim()) return;
+  const handleSaveOrUpdateNote = async () => {
+    if (!user || !noteContent.trim()) return;
     setLoading(true);
     setError(null);
     try {
-      await addDoc(collection(db, "users", user.uid, "notes"), {
-        title: newNoteTitle,
-        content: newNoteContent,
-        createdAt: serverTimestamp(),
-        folderId: noteFolderId || null, 
-      });
-      setNewNoteTitle('');
-      setNewNoteContent('');
-      setNoteFolderId('');
-      await fetchFoldersAndNotes(); 
+      if (editingNote){
+        const noteRef = doc(db, "users", user.uid, "notes", editingNote.id);
+        await updateDoc (noteRef, {
+          title: noteTitle,
+          content: noteContent,
+          folderId: noteFolderId || null,
+        });
+      }
+      else {
+        await addDoc(collection(db, "users", user.uid, "notes"), {
+          title: noteTitle,
+          content: noteContent,
+          createdAt: serverTimestamp(),
+          folderId: noteFolderId || null,
+        });
+      }
+      await fetchFoldersAndNotes();
+      cancelEdit();
     } catch (err) {
       setError("Failed to save note.");
     } finally {
@@ -173,7 +201,36 @@ export default function AIAssistantPage() {
     }
   };
 
-  
+  const handleEditNote = (note: Note) => {
+    setEditingNote(note);
+    setNoteTitle(note.title);
+    setNoteContent(note.content);
+    setNoteFolderId(note.folderId || '');
+
+    noteEditorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }); 
+    // Seamless scrolling when you click on "edit" button for notes
+
+  };
+
+  const cancelEdit = () => {
+    setEditingNote(null);
+    setNoteTitle('');
+    setNoteContent('');
+    setNoteFolderId('');
+  }
+
+  const handleDeleteNote = async (noteId: string) => {
+    if (!user) return;
+    try {
+      await deleteDoc(doc(db, "users", user.uid, "notes", noteId));
+      await fetchFoldersAndNotes();
+    } catch (err) {
+      setError("Failed to delete note.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const filteredNotes = useMemo(() => {
     if (!selectedFolderId) {
       return notes; 
@@ -241,13 +298,6 @@ export default function AIAssistantPage() {
     setShowHistory(false)
   }
 
-  const handleEditNote = () => {
-
-  }
-
-  const handleDeleteNote = () => {
-    
-  }
 
 
     return (
@@ -402,7 +452,7 @@ export default function AIAssistantPage() {
                             </CardHeader>
                             <CardContent className="flex gap-2">
                                 <Input 
-                                placeholder="New Folder Name..."
+                                placeholder="New Folder Name"
                                 value={newFolderName}
                                 onChange={(e) => setNewFolderName(e.target.value)}
                                 />
@@ -415,42 +465,62 @@ export default function AIAssistantPage() {
 
                             <div>
                                 <div className="flex justify-start gap-2 mb-4 overflow-x-auto">
-                                    <Button variant={!selectedFolderId ? 'default' : 'secondary'} onClick={() => setSelectedFolderId(null)}>All Notes</Button>
-                                
-                                    {folders.map(folder => (
-                                    <Button 
-                                      key={folder.id} 
-                                      variant={selectedFolderId === folder.id ? 'default' : 'secondary'} 
-                                      onClick={() => setSelectedFolderId(folder.id)}
-                                    >
-                                    {folder.name}
-                                    </Button>
-                                    ))}
-                                </div>
+                                  <Button 
+                                    variant={!selectedFolderId ? 'default' : 'secondary'} 
+                                    onClick={() => setSelectedFolderId(null)}
+                                    className="ml-2"
+                                  >
+                                    All Notes
+                                  </Button>
+                                  {folders.map(folder => (
+                                    <div key={folder.id} className="flex items-center rounded-md bg-secondary">
+                                      <Button 
+                                        variant={selectedFolderId === folder.id ? 'default' : 'secondary'} 
+                                        onClick={() => setSelectedFolderId(folder.id)}
+                                        className="pr-2" 
+                                      >
+                                        {folder.name}
+                                      </Button>
+                                      
+                                      <Button 
+                                        size="icon" 
+                                        variant="ghost" 
+                                        onClick={(e) => {
+                                          e.stopPropagation(); 
+                                          handleDeleteFolder(folder.id);
+                                        }}
+                                        className="pl-2 hover:bg-red-500/20"
+                                      >
+                                        <Trash className="w-4 h-4 text-red-500" /> 
+                                      </Button>
+                                    </div>
+                                  ))}
+                              </div>
                                 
                                 <div className="space-y-2 max-h-76 overflow-y-auto">
                                     {filteredNotes.map(note => (
-                                    <Card key={note.id} className="bg-white">
+                                    <Card key={note.id} className="bg-white ml-2 mr-2">
                                         <CardHeader>
-                                            <CardTitle className="text-center">{note.title || "Untitled Note"}</CardTitle>
-                                            
-                                            <Button 
-                                            variant="secondary"
-                                            onClick={handleEditNote}
-                                            >
-                                                <Pencil className="w-5 h-5" /> Edit Note
-                                            </Button>
-
-                                            <Button
-                                            onClick={handleDeleteNote}
-                                            >
-                                                <Trash className="w-5 h-5" /> Delete Note
-                                            </Button>
-
+                                          <CardTitle className="text-center">{note.title || "Untitled Note"}</CardTitle>
                                         </CardHeader>
                                         <CardContent>
                                             <p className="whitespace-pre-wrap">{note.content}</p>
                                         </CardContent>
+                                        <div className="flex justify-center">
+                                          <Button 
+                                          variant="secondary"
+                                          onClick={() => handleEditNote(note)}
+                                          className="w-1/3 mr-2"
+                                          >
+                                            <Pencil className="w-5 h-5"/> Edit Note
+                                          </Button>
+                                          <Button
+                                          onClick={() => handleDeleteNote(note.id)}
+                                          className="w-1/3"
+                                          >
+                                            <Trash className="w-5 h-5"/> Delete Note
+                                          </Button>
+                                        </div>
                                     </Card>
                                     ))}
                                 </div>
@@ -462,43 +532,23 @@ export default function AIAssistantPage() {
 
             {/*---------- "Create New Note" Card ----------- */}
                     <div>
-                        <Card className="flex bg-white border-0 shadow-lg w-200 h-120 mx-auto mt-2">
-                            <CardHeader>
-                                <CardTitle className="text-center">Create New Note</CardTitle>
-                            </CardHeader>
-
-                            <CardContent className="space-y-4 overflow-auto">
-                                <Input 
-                                placeholder="Note Title"
-                                value={newNoteTitle}
-                                onChange={(e) => setNewNoteTitle(e.target.value)}
-                                />
-                                <Textarea 
-                                className="h-55"
-                                placeholder="What's on your mind?"
-                                value={newNoteContent}
-                                onChange={(e) => setNewNoteContent(e.target.value)}
-                                />
-
-                                <Select value={noteFolderId} onValueChange={setNoteFolderId}>
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Select a folder (optional)" />
-                                    </SelectTrigger>
-
-                                    <SelectContent>
-                                        {folders.map(folder => (
-                                            <SelectItem key={folder.id} value={folder.id}>{folder.name}</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-
-                                <Button onClick={handleSaveNote} disabled={loading} className="w-full">
-                                    {loading ? "Saving..." : "Save Note"}
-                                </Button>
-
-                                {error && <p className="text-red-500 text-sm">{error}</p>}
-
-                            </CardContent>
+                        <Card ref={noteEditorRef} className="bg-white shadow-lg">
+                          <CardHeader><CardTitle className = "text-center">{editingNote ? 'Edit Note' : 'Create New Note'}</CardTitle></CardHeader>
+                          <CardContent className="space-y-4">
+                            <Input placeholder="Note Title" value={noteTitle} onChange={(e) => setNoteTitle(e.target.value)} />
+                            <Textarea className = "h-40" placeholder="What's on your mind?" value={noteContent} onChange={(e) => setNoteContent(e.target.value)} />
+                            <Select value={noteFolderId} onValueChange={setNoteFolderId}>
+                              <SelectTrigger><SelectValue placeholder="Select a folder (optional)" /></SelectTrigger>
+                              <SelectContent>{folders.map(folder => (<SelectItem key={folder.id} value={folder.id}>{folder.name}</SelectItem>))}</SelectContent>
+                            </Select>
+                            <div className="flex gap-2">
+                              <Button onClick={handleSaveOrUpdateNote} disabled={loading} className="w-30">
+                                {loading ? "Saving..." : (editingNote ? 'Update Note' : 'Save Note')}
+                              </Button>
+                              {editingNote && <Button className= "w-30" variant="secondary" onClick={cancelEdit}>Cancel</Button>}
+                            </div>
+                            {error && <p className="text-red-500 text-sm">{error}</p>}
+                          </CardContent>
                         </Card>
                     </div>
 
