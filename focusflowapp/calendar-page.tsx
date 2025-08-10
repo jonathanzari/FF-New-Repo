@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -8,7 +8,10 @@ import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ChevronLeft, ChevronRight, Plus, X } from "lucide-react"
-import { type AppSettings } from "@/settings-page";
+import { type AppSettings } from "@/settings-page"
+import { useAuth } from '@/contexts/AuthContext';
+import { db } from '@/lib/firebase';
+import { collection, addDoc, serverTimestamp, query, orderBy, getDocs, updateDoc, doc, deleteDoc } from 'firebase/firestore';
 
 /*
 Work to be done:
@@ -20,11 +23,12 @@ Adding ability to edit the task
 */
 
 interface Task {
-  id: number
+  id: string | number
   title: string
   desc: string
   date: string
   priority: "low" | "normal" | "high"
+  createdAt?: any
 }
 
 interface CalendarPageProps {
@@ -52,11 +56,13 @@ export default function CalendarPage({
   settings,
   currentTheme
 }: CalendarPageProps) {
+  const { user } = useAuth();
   const [currentDate, setCurrentDate] = useState(new Date())
   const [tasks, setTasks] = useState<Task[]>([])
   const [selectedDate, setSelectedDate] = useState<string>("")
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [newTask, setNewTask] = useState({ title: "", desc: "", priority: "normal" as "low" | "normal" | "high" })
+  const [loading, setLoading] = useState(false)
 
   const today = new Date()
   const year = currentDate.getFullYear()
@@ -84,6 +90,65 @@ export default function CalendarPage({
 
   const weekDays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
+  // Load tasks from Firebase on component mount
+  useEffect(() => {
+    if (user) {
+      loadTasks();
+    }
+  }, [user]);
+
+  const loadTasks = async () => {
+    if (!user) return;
+    
+    try {
+      setLoading(true);
+      const tasksQuery = query(
+        collection(db, "users", user.uid, "calendarTasks"),
+        orderBy("createdAt", "desc")
+      );
+      const querySnapshot = await getDocs(tasksQuery);
+      const loadedTasks = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        title: doc.data().title,
+        desc: doc.data().desc,
+        date: doc.data().date,
+        priority: doc.data().priority,
+        createdAt: doc.data().createdAt
+      }));
+      setTasks(loadedTasks);
+    } catch (error) {
+      console.error("Error loading tasks:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const saveTask = async (task: Task) => {
+    if (!user) return;
+    
+    try {
+      await addDoc(collection(db, "users", user.uid, "calendarTasks"), {
+        title: task.title,
+        desc: task.desc,
+        date: task.date,
+        priority: task.priority,
+        createdAt: serverTimestamp()
+      });
+    } catch (error) {
+      console.error("Error saving task:", error);
+    }
+  };
+
+  const deleteTaskFromFirebase = async (taskId: string) => {
+    if (!user) return;
+    
+    try {
+      await deleteDoc(doc(db, "users", user.uid, "calendarTasks", taskId));
+    } catch (error) {
+      console.error("Error deleting task:", error);
+    }
+  };
+
   const navigateMonth = (direction: "prev" | "next") => {
     setCurrentDate(new Date(year, month + (direction === "next" ? 1 : -1), 1))
   }
@@ -102,7 +167,7 @@ export default function CalendarPage({
     setIsDialogOpen(true)
   }
 
-  const addTask = () => {
+  const addTask = async () => {
     if (newTask.title.trim() && selectedDate) {
       const task: Task = {
         id: Date.now(),
@@ -112,13 +177,22 @@ export default function CalendarPage({
         priority: newTask.priority,
       }
       setTasks([...tasks, task])
+      
+      // Save to Firebase
+      await saveTask(task);
+      
       setNewTask({ title: "", desc: "", priority: "normal" })
       setIsDialogOpen(false)
     }
   }
 
-  const deleteTask = (taskId: number) => {
+  const deleteTask = async (taskId: string | number) => {
     setTasks(tasks.filter((task) => task.id !== taskId))
+    
+    // Delete from Firebase if it's a string ID (Firebase document ID)
+    if (typeof taskId === 'string') {
+      await deleteTaskFromFirebase(taskId);
+    }
   }
 
   const renderCalendarDays = () => {
@@ -165,14 +239,15 @@ export default function CalendarPage({
   return (
     <div className="min-h-screen p-6"
       style={{
-      background: `currentTheme.primary, currentTheme.secondary`}}
+        background: `linear-gradient(135deg, ${currentTheme.primary}, ${currentTheme.secondary})`
+      }}
     >
       {/* Header > Main Layout */}
       
-      <div className = "max-w-4xl mx-auto space-y-6">
-        <div className = "text-center mb-8">
-          <h1 className="text-3xl font-bold text-white mb-2"> Calendar </h1>
-          <p className = "text-white/80"> Add tasks for each day and set priorities</p>  
+      <div className="max-w-4xl mx-auto space-y-6">
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-bold text-white mb-2">Calendar</h1>
+          <p className="text-white/80">Add tasks for each day and set priorities</p>  
         </div>
       </div>
 
@@ -249,12 +324,12 @@ export default function CalendarPage({
             <div>
               <Label htmlFor="task-description">Task Description</Label>
               <Input
-                id = "task-description"
+                id= "task-description"
                 value={newTask.desc}
-                onChange={(e)=> setNewTask({ ...newTask, desc: e.target.value})}
+                onChange={(e) => setNewTask({ ...newTask, desc: e.target.value })}
                 placeholder="Enter task description..."
                 className="mt-1"
-                />
+              />
             </div>
 
             <div>
@@ -301,7 +376,7 @@ export default function CalendarPage({
                         <span className="text-m">
                         <b>{task.title + ":"}</b>
                         </span>
-                        <span className = "text-xs">{task.desc}</span>
+                        <span className="text-xs">{task.desc}</span>
                       </div>
                       <Button
                         onClick={() => deleteTask(task.id)}
