@@ -1,9 +1,12 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { TrendingUp, Target, Timer, CheckCircle } from "lucide-react"
 import { AppSettings } from "./settings-page"
+import { useAuth } from '@/contexts/AuthContext'
+import { db } from '@/lib/firebase'
+import { collection, query, orderBy, onSnapshot } from 'firebase/firestore'
 
 /*
 
@@ -14,15 +17,15 @@ saved if user is logged in (into firestore for retrieval when logged back in)
 */
 
 interface StudySession {
-  id: number
+  id: string
   date: string
   type: "Pomodoro" | "Short Break" | "Long Break"
   duration: number
   completed: boolean
+  createdAt?: any
 }
 
 interface AnalysisPageProps {
-  studySessions?: StudySession[];
   settings: AppSettings;
   currentTheme: {
     primary: string;
@@ -34,24 +37,48 @@ interface AnalysisPageProps {
 
 
 export default function AnalysisPage({
-  studySessions = [],
   settings,
   currentTheme
 }: AnalysisPageProps) {
+  const { user } = useAuth()
+  const [studySessions, setStudySessions] = useState<StudySession[]>([])
+  const [loading, setLoading] = useState(false)
   const [selectedPeriod, setSelectedPeriod] = useState<"week" | "month" | "all">("week")
 
+  // Load study sessions from Firebase
+  useEffect(() => {
+    if (!user) return
+
+    setLoading(true)
+    const sessionsQuery = query(
+      collection(db, "users", user.uid, "timerSessions"),
+      orderBy("createdAt", "desc")
+    )
+
+    const unsubscribe = onSnapshot(sessionsQuery, (snapshot) => {
+      const sessionsData = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as StudySession[]
+      setStudySessions(sessionsData)
+      setLoading(false)
+    })
+
+    return () => unsubscribe()
+  }, [user])
+
   // Calculate statistics
-  const completedSessions = studySessions.filter((session) => session.completed)
-  const pomodoroSessions = completedSessions.filter((session) => session.type === "Pomodoro")
-  const totalStudyTime = pomodoroSessions.reduce((total, session) => total + session.duration, 0)
+  const completedSessions = studySessions.filter((session: StudySession) => session.completed)
+  const pomodoroSessions = completedSessions.filter((session: StudySession) => session.type === "Pomodoro")
+  const totalStudyTime = pomodoroSessions.reduce((total: number, session: StudySession) => total + session.duration, 0)
   const totalBreakTime = completedSessions
-    .filter((session) => session.type !== "Pomodoro")
-    .reduce((total, session) => total + session.duration, 0)
+    .filter((session: StudySession) => session.type !== "Pomodoro")
+    .reduce((total: number, session: StudySession) => total + session.duration, 0)
 
   // Get recent sessions (last 7 days)
   const now = new Date()
   const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
-  const recentSessions = completedSessions.filter((session) => new Date(session.date) >= weekAgo)
+  const recentSessions = completedSessions.filter((session: StudySession) => new Date(session.date) >= weekAgo)
 
   // Format time in hours and minutes
   const formatTime = (seconds: number) => {
@@ -72,9 +99,9 @@ export default function AnalysisPage({
       const dayName = date.toLocaleDateString("en-US", { weekday: "short" })
 
       const daySessions = completedSessions.filter(
-        (session) => session.date.startsWith(dateStr) && session.type === "Pomodoro",
+        (session: StudySession) => session.date.startsWith(dateStr) && session.type === "Pomodoro",
       )
-      const dayMinutes = daySessions.reduce((total, session) => total + session.duration, 0) / 60
+      const dayMinutes = daySessions.reduce((total: number, session: StudySession) => total + session.duration, 0) / 60
 
       dailyData.push({
         day: dayName,
@@ -90,7 +117,6 @@ export default function AnalysisPage({
   const maxMinutes = Math.max(...dailyData.map((d) => d.minutes), 1)
 
   return (
-    
     <div className="min-h-screen p-6"
       style={{
       background: `currentTheme.primary, currentTheme.secondary`}}
@@ -98,11 +124,22 @@ export default function AnalysisPage({
       {/* Header > Main Layout */}
 
       {/* Analysis Content */}
+      {loading ? (
+        <div className="text-center py-8">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto"></div>
+          <p className="text-white mt-4">Loading your study data...</p>
+        </div>
+      ) : (
       <div className="max-w-4xl mx-auto space-y-6">
         {/* Header */}
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-white mb-2">Study Analysis</h1>
           <p className="text-blue-100">Track your productivity and study patterns</p>
+          {!user && (
+            <div className="mt-4 p-4 bg-yellow-100 border border-yellow-400 rounded-lg">
+              <p className="text-yellow-800">Please log in to view your study analytics</p>
+            </div>
+          )}
         </div>
 
         {/* Stats Cards */}
@@ -145,7 +182,7 @@ export default function AnalysisPage({
           <Card className="bg-white border-0 shadow-lg">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium text-gray-600">Study Streak</CardTitle>
-              <TrendingUp className="h-4 w-4 text-purple-600" />
+                              <TrendingUp className="h-4 w-4 text-black" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-gray-800">
@@ -208,7 +245,7 @@ export default function AnalysisPage({
                               ? "bg-green-500"
                               : session.type === "Short Break"
                                 ? "bg-blue-500"
-                                : "bg-purple-500"
+                                : "bg-black"
                           }`}
                         ></div>
                         <div>
@@ -237,6 +274,8 @@ export default function AnalysisPage({
           </CardContent>
         </Card>
       </div>
+      )}
     </div>
   )
 }
+
