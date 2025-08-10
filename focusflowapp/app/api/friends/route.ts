@@ -1,31 +1,52 @@
-import { NextResponse } from 'next/server';
-import driver from '@/lib/neo4j';
+import { NextRequest, NextResponse } from 'next/server';
+import { db } from '@/lib/firebase';
+import { doc, getDoc } from 'firebase/firestore';
 
-export async function POST(request: Request) {
-  const { currentUserId } = await request.json();
-
-  if (!currentUserId) {
-    return NextResponse.json({ message: 'User ID is required.' }, { status: 400 });
-  }
-
-  const session = driver.session();
+export async function POST(request: NextRequest) {
   try {
-    const query = `
-      MATCH (currentUser:User {userId: $currentUserId})-[:IS_FRIENDS_WITH]->(friend:User)
-      RETURN friend.userId AS userId, friend.username AS username, friend.photoURL AS photoURL
-    `;
-    const result = await session.run(query, { currentUserId });
+    const { currentUserId } = await request.json();
     
-    const friends = result.records.map(record => ({
-      userId: record.get('userId'),
-      username: record.get('username'),
-      photoURL: record.get('photoURL'),
-    }));
+    if (!currentUserId) {
+      return NextResponse.json({ error: 'Current user ID is required' }, { status: 400 });
+    }
 
-    return NextResponse.json(friends);
+    // Get the current user's document to find their friends
+    const userDocRef = doc(db, 'users', currentUserId);
+    const userDoc = await getDoc(userDocRef);
+    
+    if (!userDoc.exists()) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+
+    const userData = userDoc.data();
+    const friends = userData.friends || [];
+
+    // Fetch friend details for each friend ID
+    const friendsWithDetails = await Promise.all(
+      friends.map(async (friendId: string) => {
+        const friendDocRef = doc(db, 'users', friendId);
+        const friendDoc = await getDoc(friendDocRef);
+        
+        if (friendDoc.exists()) {
+          const friendData = friendDoc.data();
+          return {
+            userId: friendId,
+            username: friendData.displayName || friendData.email || 'Unknown User',
+            photoURL: friendData.photoURL || null
+          };
+        } else {
+          return {
+            userId: friendId,
+            username: 'Unknown User',
+            photoURL: null
+          };
+        }
+      })
+    );
+
+    return NextResponse.json(friendsWithDetails);
   } catch (error) {
-    return NextResponse.json({ message: 'An error occurred fetching friends.' }, { status: 500 });
-  } finally {
-    await session.close();
+    console.error('Error fetching friends:', error);
+    return NextResponse.json({ error: 'Failed to fetch friends' }, { status: 500 });
   }
-}
+} 
