@@ -7,12 +7,13 @@ import { useAuth } from '@/contexts/AuthContext';
 import { LogOut, Upload, Trash2, Shredder, UserPen, Check } from 'lucide-react'; 
 import { storage, db, auth } from '@/lib/firebase';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
-import { doc, updateDoc, getDoc } from "firebase/firestore";
+import { doc, updateDoc, getDoc, collection, query, where, onSnapshot } from "firebase/firestore";
 import { updateProfile } from "firebase/auth";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Users, Lock, Globe, MessageCircle } from 'lucide-react';
 
 
 /*
@@ -76,6 +77,7 @@ export default function ProfilePage({ onNavigate }: ProfilePageProps) {
 
   const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
   const [educationLevel, setEducationLevel] = useState<string>('');
+  const [studyGroups, setStudyGroups] = useState<any[]>([]);
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -90,6 +92,32 @@ export default function ProfilePage({ onNavigate }: ProfilePageProps) {
       }
     };
     fetchUserData();
+  }, [user]);
+
+  // Load user's study groups
+  useEffect(() => {
+    if (!user) return;
+
+    const groupsQuery = query(
+      collection(db, 'studyGroups'),
+      where('members', 'array-contains', user.uid)
+    );
+
+    const unsubscribe = onSnapshot(groupsQuery, (snapshot) => {
+      const groupsData = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as any[];
+      // Sort by updatedAt in JavaScript instead of Firestore
+      groupsData.sort((a, b) => {
+        const aTime = a.updatedAt?.toDate?.() || new Date(0);
+        const bTime = b.updatedAt?.toDate?.() || new Date(0);
+        return bTime.getTime() - aTime.getTime();
+      });
+      setStudyGroups(groupsData);
+    });
+
+    return () => unsubscribe();
   }, [user]);
 
 
@@ -478,6 +506,35 @@ export default function ProfilePage({ onNavigate }: ProfilePageProps) {
                             Recent Study Groups
                         </CardTitle>
                     </CardHeader>
+                    <CardContent>
+                      {studyGroups.length === 0 ? (
+                        <div className="text-center py-4">
+                          <Users className="w-12 h-12 text-gray-300 mx-auto mb-2" />
+                          <p className="text-gray-500 text-sm">No study groups yet</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {studyGroups.slice(0, 3).map((group) => (
+                            <div key={group.id} className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
+                              <div className="flex items-center gap-2">
+                                {group.isPrivate ? (
+                                  <Lock className="w-4 h-4 text-orange-500" />
+                                ) : (
+                                  <Globe className="w-4 h-4 text-blue-500" />
+                                )}
+                                <div>
+                                  <p className="font-medium text-sm">{group.name}</p>
+                                  <p className="text-xs text-gray-500">{group.memberCount} members</p>
+                                </div>
+                              </div>
+                              <Badge variant="secondary" className="text-xs">
+                                {group.hostId === user?.uid ? 'Host' : 'Member'}
+                              </Badge>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </CardContent>
                 </Card>
               </div>
         </div>
