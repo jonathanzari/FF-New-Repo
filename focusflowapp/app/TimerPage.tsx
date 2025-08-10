@@ -6,63 +6,209 @@ import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Trash2, Plus } from "lucide-react";
 import { type AppSettings } from "@/settings-page";
+import { useAuth } from '@/contexts/AuthContext';
+import { db } from '@/lib/firebase';
+import { collection, addDoc, serverTimestamp, query, orderBy, getDocs, updateDoc, doc, deleteDoc, where } from 'firebase/firestore';
 
-/*
 
-Things To Work On:
-Saving tasks that the user creates in the page
-
-Adding editing functionality to the tasks
-
-When a full timer session has been completed, it is tracked (if user is logged in)
-
-Need it to not reset when the user navigates away from the page
-
-*/
 
 
 interface TimerPageProps {
-  timeLeft: number;
-  isRunning: boolean;
-  selectedMode: string;
-  modes: { [key: string]: number };
-  toggleTimer: () => void;
-  handleModeChange: (mode: string) => void;
   settings: AppSettings;
-  tasks: { id: number; text: string; completed: boolean }[];
-  newTaskText: string;
-  showAddInput: boolean;
-  toggleTask: (id: number) => void;
-  deleteTask: (id: number) => void;
-  addTask: () => void;
-  cancelAddTask: () => void;  
-  setNewTaskText: (text: string) => void;
-  showAddTaskInput: () => void;
   currentTheme: {
     primary: string;
     secondary: string;
     accent: string;
   };
   onSessionComplete: (session: any) => void;
-} 
+}
 
-export default function TimerPage({ 
-  settings, currentTheme, onSessionComplete, timeLeft, isRunning, selectedMode, modes, toggleTimer, handleModeChange,
-   tasks, newTaskText, showAddInput, toggleTask, deleteTask, addTask, cancelAddTask, setNewTaskText, showAddTaskInput
-}: TimerPageProps) {
+export default function TimerPage({ settings, currentTheme, onSessionComplete }: TimerPageProps) {
+  const { user } = useAuth();
+  const [selectedMode, setSelectedMode] = useState("Pomodoro");
+  const [timeLeft, setTimeLeft] = useState(settings.pomodoroDuration * 60);
+  const [isRunning, setIsRunning] = useState(false);
+  const [tasks, setTasks] = useState<{ id: string | number, text: string, completed: boolean }[]>([{ id: 1, text: "Task #1", completed: false }]);
+  const [newTaskText, setNewTaskText] = useState("");
+  const [showAddInput, setShowAddInput] = useState(false);
+  const [loading, setLoading] = useState(false);
 
+  const modes = {
+    Pomodoro: settings.pomodoroDuration * 60,
+    "Short Break": settings.shortBreakDuration * 60,
+    "Long Break": settings.longBreakDuration * 60,
+  };
 
- 
+  // Load tasks from Firebase on component mount
+  useEffect(() => {
+    if (user) {
+      loadTasks();
+    }
+  }, [user]);
+
+  const loadTasks = async () => {
+    if (!user) return;
+    
+    try {
+      setLoading(true);
+      const tasksQuery = query(
+        collection(db, "users", user.uid, "timerTasks"),
+        orderBy("createdAt", "desc")
+      );
+      const querySnapshot = await getDocs(tasksQuery);
+      const loadedTasks = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        text: doc.data().text,
+        completed: doc.data().completed,
+        createdAt: doc.data().createdAt
+      }));
+      setTasks(loadedTasks);
+    } catch (error) {
+      console.error("Error loading tasks:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const saveTask = async (task: { id: string | number, text: string, completed: boolean }) => {
+    if (!user) return;
+    
+    try {
+      await addDoc(collection(db, "users", user.uid, "timerTasks"), {
+        text: task.text,
+        completed: task.completed,
+        createdAt: serverTimestamp()
+      });
+    } catch (error) {
+      console.error("Error saving task:", error);
+    }
+  };
+
+  const updateTask = async (taskId: string, updates: any) => {
+    if (!user) return;
+    
+    try {
+      await updateDoc(doc(db, "users", user.uid, "timerTasks", taskId), updates);
+    } catch (error) {
+      console.error("Error updating task:", error);
+    }
+  };
+
+  const deleteTaskFromFirebase = async (taskId: string) => {
+    if (!user) return;
+    
+    try {
+      await deleteDoc(doc(db, "users", user.uid, "timerTasks", taskId));
+    } catch (error) {
+      console.error("Error deleting task:", error);
+    }
+  };
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout | null = null;
+    if (isRunning && timeLeft > 0) {
+      interval = setInterval(() => {
+        setTimeLeft((prevTime) => prevTime - 1);
+      }, 1000);
+    } else if (timeLeft === 0 && isRunning) {
+      setIsRunning(false);
+      completeSession();
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [isRunning, timeLeft]);
+
+  useEffect(() => {
+    if (!isRunning) {
+      const newTime = modes[selectedMode as keyof typeof modes];
+      setTimeLeft(newTime);
+    }
+  }, [settings, selectedMode]);
+
+  const completeSession = async () => {
+    const session = {
+      id: Date.now(),
+      date: new Date().toISOString(),
+      type: selectedMode as "Pomodoro" | "Short Break" | "Long Break",
+      duration: modes[selectedMode as keyof typeof modes],
+      completed: true,
+    };
+    
+    // Save session to Firebase if user is logged in
+    if (user) {
+      try {
+        await addDoc(collection(db, "users", user.uid, "timerSessions"), {
+          ...session,
+          createdAt: serverTimestamp()
+        });
+      } catch (error) {
+        console.error("Error saving session:", error);
+      }
+    }
+    
+    onSessionComplete(session);
+  };
+
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   };
 
+  const handleModeChange = (mode: string) => {
+    setSelectedMode(mode);
+    setIsRunning(false);
+  };
+
+  const toggleTimer = () => setIsRunning(!isRunning);
+  
+  const deleteTask = async (id: string | number) => {
+    setTasks(tasks.filter((task) => task.id !== id));
+    if (typeof id === 'string') {
+      await deleteTaskFromFirebase(id);
+    }
+  };
+  
+  const toggleTask = async (id: string | number) => {
+    const updatedTasks = tasks.map((task) => 
+      task.id === id ? { ...task, completed: !task.completed } : task
+    );
+    setTasks(updatedTasks);
+    
+    if (typeof id === 'string') {
+      const task = tasks.find(t => t.id === id);
+      if (task) {
+        await updateTask(id, { completed: !task.completed });
+      }
+    }
+  };
+
+  const addTask = async () => {
+    if (newTaskText.trim()) {
+      const newTask = {
+        id: Date.now(),
+        text: newTaskText.trim(),
+        completed: false,
+      };
+      setTasks([...tasks, newTask]);
+      
+      // Save to Firebase
+      await saveTask(newTask);
+      
+      setNewTaskText("");
+      setShowAddInput(false);
+    }
+  };
+
+  const showAddTaskInput = () => setShowAddInput(true);
+  const cancelAddTask = () => {
+    setNewTaskText("");
+    setShowAddInput(false);
+  };
 
   return (
     <div className="max-w-2xl mx-auto">
-
       <Card className="border-0 p-8 mb-6" style={{ backgroundColor: currentTheme.accent }}>
         <div className="flex justify-center gap-4 mb-8">
           {Object.keys(modes).map((mode) => (
@@ -82,7 +228,6 @@ export default function TimerPage({
           <Button onClick={toggleTimer} className="bg-white hover:bg-gray-100 text-gray-800 font-bold px-12 py-3 rounded-full text-lg">
             {isRunning ? "PAUSE" : "START"}
           </Button>
-
         </div>
       </Card>
       <div className="text-center mb-6">
