@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { Button } from "@/components/ui/button";
-import { Calendar, BarChart3, Settings, LogIn, User as UserIcon, Timer, BrainCircuit, Handshake} from "lucide-react";
+import { Calendar, BarChart3, Settings, LogIn, User as UserIcon, Timer, BrainCircuit, Handshake, Users} from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
 /*
@@ -13,7 +13,7 @@ MainLayout: Simplifies the header button layout and replicates it for each defin
 
 interface MainLayoutProps {
   children: React.ReactNode;
-  onNavigate: (page: "timer" | "calendar" | "analysis" | "settings" | "profile" | "ai-assistant" | "friends") => void;
+  onNavigate: (page: "timer" | "calendar" | "analysis" | "settings" | "profile" | "ai-assistant" | "friends" | "study-groups") => void;
   onSignInClick: () => void;
   theme: { primary: string; secondary: string; };
 }
@@ -75,6 +75,10 @@ export default function MainLayout({ children, onNavigate, onSignInClick, theme 
           <Button onClick={() => onNavigate("friends")} variant= "secondary" size= "sm" className="bg-white text-gray-800 border-0 font-medium">
             <Handshake className="w-4 h-4 mr-1" /> 
            Friends
+          </Button>
+          <Button onClick={() => onNavigate("study-groups")} variant= "secondary" size= "sm" className="bg-white text-gray-800 border-0 font-medium">
+            <Users className="w-4 h-4 mr-1" /> 
+           Study Groups
           </Button>
           
 
