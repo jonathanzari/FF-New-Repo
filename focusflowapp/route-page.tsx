@@ -11,6 +11,7 @@ import ProfilePage from "./profile-page";
 import ForgotPasswordPage from "./forgot-password-page";
 import AIAssistantPage from "./ai-assistant-page";
 import FriendsPage from "./friends-page";
+import StudyGroupsPage from "./study-groups-page";
 
 /*
 
@@ -189,18 +190,15 @@ export default function Home() {
     >
       {/* All handlers and props have to be transferred to this page where it does NOT change, essentially keeps from the timer and created tasks from disappearing when going tab to tab */}
 
-      {currentPage === "timer" && (
-
-      <TimerPage timeLeft = {timeLeft} isRunning = {isRunning} selectedMode = {selectedMode} modes = {modes} toggleTimer = {toggleTimer} handleModeChange = {handleModeChange} tasks = {tasks} newTaskText = {newTaskText}
-      showAddInput = {showAddInput} toggleTask = {toggleTask} deleteTask = {deleteTask} addTask = {addTask} cancelAddTask = {cancelAddTask} setNewTaskText = {setNewTaskText} showAddTaskInput = {showAddTaskInput}
-      settings={settings} currentTheme={currentTheme} onSessionComplete={addStudySession} /> )}
+      {currentPage === "timer" && <TimerPage settings={settings} currentTheme={currentTheme} onSessionComplete={() => {}} />}
 
       {currentPage === "calendar" && <CalendarPage settings={settings} currentTheme={currentTheme}/>}
-      {currentPage === "analysis" && <AnalysisPage studySessions={studySessions} settings={settings} currentTheme={currentTheme} />}
+      {currentPage === "analysis" && <AnalysisPage settings={settings} currentTheme={currentTheme} />}
       {currentPage === "settings" && <SettingsPage settings={settings} onSettingsChange={handleSettingsChange} />}
       {currentPage === "profile" && <ProfilePage onNavigate = {setCurrentPage as any} />}
       {currentPage === "ai-assistant" && <AIAssistantPage /> }
       {currentPage === "friends" && <FriendsPage /> }
+      {currentPage === "study-groups" && <StudyGroupsPage settings={settings} currentTheme={currentTheme} />}
     </MainLayout>
   );
 }
