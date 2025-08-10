@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -9,6 +9,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch"
 import { Slider } from "@/components/ui/slider"
 import { Palette, Volume2, Timer, Save } from "lucide-react"
+import { useAuth } from '@/contexts/AuthContext';
+import { db } from '@/lib/firebase';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
 
 /*
 Work to be done for page:
@@ -63,10 +66,10 @@ const colorThemes = {
     accent: "#6b9b37",
   },
   purple: {
-    name: "Royal Purple",
-    primary: "#6b46c1",
-    secondary: "#8b5cf6",
-    accent: "#a78bfa",
+    name: "Black",
+    primary: "#000000",
+    secondary: "#1a1a1a",
+    accent: "#333333",
   },
   orange: {
     name: "Sunset Orange",
@@ -80,8 +83,47 @@ export default function SettingsPage({
   settings = defaultSettings,
   onSettingsChange,
 }: SettingsPageProps) {
+  const { user } = useAuth();
   const [localSettings, setLocalSettings] = useState<AppSettings>(settings)
   const [hasChanges, setHasChanges] = useState(false)
+  const [loading, setLoading] = useState(false)
+
+  // Load settings from Firebase on component mount
+  useEffect(() => {
+    if (user) {
+      loadSettings();
+    }
+  }, [user]);
+
+  const loadSettings = async () => {
+    if (!user) return;
+    
+    try {
+      setLoading(true);
+      const userDoc = await getDoc(doc(db, "users", user.uid));
+      if (userDoc.exists() && userDoc.data().settings) {
+        const savedSettings = userDoc.data().settings;
+        setLocalSettings({ ...defaultSettings, ...savedSettings });
+        onSettingsChange?.({ ...defaultSettings, ...savedSettings });
+      }
+    } catch (error) {
+      console.error("Error loading settings:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const saveSettingsToFirebase = async (settings: AppSettings) => {
+    if (!user) return;
+    
+    try {
+      await setDoc(doc(db, "users", user.uid), {
+        settings: settings
+      }, { merge: true });
+    } catch (error) {
+      console.error("Error saving settings:", error);
+    }
+  };
 
   const updateSetting = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
     const newSettings = { ...localSettings, [key]: value }
@@ -89,8 +131,14 @@ export default function SettingsPage({
     setHasChanges(true)
   }
 
-  const saveSettings = () => {
+  const saveSettings = async () => {
     onSettingsChange?.(localSettings)
+    
+    // Save to Firebase if user is logged in
+    if (user) {
+      await saveSettingsToFirebase(localSettings);
+    }
+    
     setHasChanges(false)
   }
 
