@@ -19,7 +19,7 @@ Work to be done for page:
 Save all the configurations done in this page to the user's account (if any is done)
 Meaning the next time the user signs in, all the configuration that the user has set is restored...
 
-Maybe have a section where you're able to choose a specific tone for the timer notification ? 
+
 
 */
 
