@@ -9,6 +9,14 @@ import { doc, getDoc, collection, query, where, onSnapshot, updateDoc } from "fi
 import { Badge } from '@/components/ui/badge';
 import { Button } from "@/components/ui/button";
 import { UserPlus, UserCheck, User, Users, Lock, Globe, UserMinus } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import UserProfileViewer from "@/app/UserProfileViewer";
 
 
 
@@ -130,7 +138,7 @@ export default function FriendsPage(
     const [studyGroups, setStudyGroups] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
 
-
+    const [viewingUserId, setViewingUserId] = useState<string | null>(null);
 
       useEffect(() => {
         const fetchUserData = async () => {
@@ -264,6 +272,7 @@ export default function FriendsPage(
       }, [user]);
 
 
+
     const handleSendRequest = async (targetUserId: string, targetUsername: string) => {
     if (!user) return;
     try {
@@ -320,8 +329,9 @@ export default function FriendsPage(
     }
   };
 
-
-
+  const handleViewProfile = (userId: string) => {
+    setViewingUserId(userId);
+  };
 
     return(
     
@@ -334,7 +344,7 @@ export default function FriendsPage(
                     {user ? (
                         <div>
                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-4">
-                                <Card className = "bg-white border-0 shadow-lg h-120">
+                                <Card className = "bg-white border-0 shadow-lg">
                                     <CardHeader>
                                         <CardTitle className = "text-center ">
                                             Visible Profile
@@ -364,12 +374,18 @@ export default function FriendsPage(
                                             </CardTitle>
 
                                             {requests.length === 0 ? (
-                                            <p className="text-sm text-gray-500 mt-4">No new requests.</p>
+                                            <p className="text-sm text-center text-gray-500 mt-4">No new requests.</p>
                                             ) : (
                                             <div className="space-y-4 overflow-y-auto">
                                             {requests.map((request) => (
-                                                <div key={`request-${request.userId}`} className="flex items-center justify-between mt-4">
-                                                    <span>{request.username}</span>
+                                            <div 
+                                            key={`request-${request.userId}`} 
+                                            className="flex items-center justify-between mt-4"
+                                            >
+                                                    <span
+                                                    className="p-2 rounded-lg hover:bg-gray-100"
+                                                    onClick={() => handleViewProfile(request.userId)}  
+                                                    >{request.username}</span>
                                                     <Button size="sm" onClick={() => handleAcceptRequest(request.userId)}>
                                                         <UserCheck className="w-4 h-4 mr-2" />
                                                         Accept
@@ -385,48 +401,62 @@ export default function FriendsPage(
 
                                 <div className="grid grid-cols-1 gap-2">           
                                     <Card className = "bg-white border-0 shadow-lg">
+
                                         <CardHeader>
                                             <CardTitle className = "text-center">
                                                 Suggested Friends
                                             </CardTitle>
                                         </CardHeader>
+
                                         <CardContent>
-                                          <div className="space-y-4 overflow-y-auto">
+                                          <div className="space-y-4">
                                             {loading && <p className="text-center text-gray-500">Loading suggestions...</p>}
                                             {suggestedUsers.map((suggestedUser) => (
-                                              <div key={`suggested-${suggestedUser.userId}`} className="flex items-center justify-between">
-                                                <span>{suggestedUser.username}</span>
-                                                                                                 <Button size="sm" onClick={() => handleSendRequest(suggestedUser.userId, suggestedUser.username)}>
+                                              <div 
+                                              key={`suggested-${suggestedUser.userId}`} 
+                                              className="flex items-center justify-between overflow-y-auto"
+                                              >
+                                                <span 
+                                                className="p-2 rounded-lg hover:bg-gray-100"
+                                                onClick={() => handleViewProfile(suggestedUser.userId)}
+                                                >{suggestedUser.username}</span>
+                                                <Button size="sm" onClick={() => handleSendRequest(suggestedUser.userId, suggestedUser.username)}>
                                                    <UserPlus className="w-4 h-4 mr-2" />
                                                    Add Friend
                                                  </Button>
                                               </div>
                                             ))}
+
                                             <CardTitle className="text-center">Friends</CardTitle>
+
                                             {friends.map((friend) => (
-                                            <div key={`friend-${friend.userId}`} className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-100 overflow-y-auto">
-                                            <div className="flex items-center gap-4">
-                                            <Avatar src={friend.photoURL} alt={friend.username} />
-                                            <span className="font-medium">{friend.username}</span>
-                                            </div>
-                                            <Button 
-                                              size="sm" 
-                                              variant="outline" 
-                                              onClick={() => handleDeleteFriend(friend.userId)}
-                                              className="text-red-600 border-red-300 hover:bg-red-50"
+                                            <div 
+                                            key={`friend-${friend.userId}`} 
+                                            className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-100 overflow-y-auto"
+                                            onClick={() => handleViewProfile(friend.userId)}
                                             >
-                                              <UserMinus className="w-4 h-4 mr-2" />
-                                              Remove
-                                            </Button>
+                                              <div className="flex items-center gap-4">
+                                                <Avatar src={friend.photoURL} alt={friend.username} />
+                                                <span className="font-medium">{friend.username}</span>
+                                              </div>
+                                              <Button 
+                                                size="sm" 
+                                                variant="outline" 
+                                                onClick={() => handleDeleteFriend(friend.userId)}
+                                                className="text-red-600 border-red-300 hover:bg-red-50"
+                                              >
+                                                <UserMinus className="w-4 h-4 mr-2" />
+                                                Remove
+                                              </Button>
                                             </div>
-                                        ))}
+                                            ))}
                                           </div>
                                         </CardContent>
                                     </Card>
 
                                 </div>
                             </div>
-                                                         <Card className = "bg-white border-0 shadow-lg">
+                            <Card className = "bg-white border-0 shadow-lg">
                                      <CardHeader>
                                          <CardTitle className = "text-center">
                                              Existing Study Groups
@@ -461,7 +491,7 @@ export default function FriendsPage(
                                          </div>
                                        )}
                                      </CardContent>
-                             </Card>
+                            </Card>
 
                              
                         </div>
@@ -477,6 +507,16 @@ export default function FriendsPage(
                         </div>
                     )}
             </div>
+
+              <Dialog open={!!viewingUserId} onOpenChange={(isOpen) => !isOpen && setViewingUserId(null)}>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>User Profile</DialogTitle>
+                  </DialogHeader>
+                  {viewingUserId && <UserProfileViewer userId={viewingUserId} />}
+                </DialogContent>
+              </Dialog>
+
         </div>
     )
 }
