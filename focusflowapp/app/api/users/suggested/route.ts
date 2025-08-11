@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
        AND NOT EXISTS((u)-[:SENT_REQUEST_TO]-(:User {userId: $currentUserId}))
        AND NOT EXISTS((:User {userId: $currentUserId})-[:SENT_REQUEST]-(u))
        RETURN DISTINCT u.userId as userId, u.username as username
-       LIMIT 10`,
+       LIMIT 15`,
       { currentUserId }
     );
 

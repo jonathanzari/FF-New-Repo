@@ -45,7 +45,7 @@ export default function AnalysisPage({
   const [loading, setLoading] = useState(false)
   const [selectedPeriod, setSelectedPeriod] = useState<"week" | "month" | "all">("week")
 
-  // Load study sessions from Firebase
+  // Loading study sessions from Firebase...
   useEffect(() => {
     if (!user) return
 
@@ -67,7 +67,7 @@ export default function AnalysisPage({
     return () => unsubscribe()
   }, [user])
 
-  // Calculate statistics
+  // Calculate statistics:
   const completedSessions = studySessions.filter((session: StudySession) => session.completed)
   const pomodoroSessions = completedSessions.filter((session: StudySession) => session.type === "Pomodoro")
   const totalStudyTime = pomodoroSessions.reduce((total: number, session: StudySession) => total + session.duration, 0)
@@ -186,7 +186,33 @@ export default function AnalysisPage({
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-gray-800">
-                {recentSessions.length > 0 ? Math.min(recentSessions.length, 7) : 0}
+              {
+                (() => {
+                  // Get the last 7 days (dates as YYYY-MM-DD)
+                  const last7Days = Array.from({ length: 7 }, (_, i) => {
+                    const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000)
+                    return d.toISOString().split("T")[0]
+                  })
+
+                  // Find which of the last 7 days have at least one Pomodoro session
+                  const daysWithSession = last7Days.filter(dateStr =>
+                    completedSessions.some(
+                      session => session.type === "Pomodoro" && session.date.startsWith(dateStr)
+                    )
+                  )
+
+                  // Calculate streak: count consecutive days from today backwards
+                  let streak = 0
+                  for (const dateStr of daysWithSession) {
+                    if (dateStr === last7Days[streak]) {
+                      streak++
+                    } else {
+                      break
+                    }
+                  }
+                  return streak
+                })()
+              }
               </div>
               <p className="text-xs text-gray-500 mt-1">Days this week</p>
             </CardContent>

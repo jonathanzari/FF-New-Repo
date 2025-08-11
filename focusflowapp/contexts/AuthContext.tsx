@@ -5,7 +5,20 @@ import React, { createContext, useState, useContext, useEffect, ReactNode } from
 import { getAuth, onAuthStateChanged, User, signOut, sendPasswordResetEmail, EmailAuthProvider, reauthenticateWithCredential, 
 verifyBeforeUpdateEmail, ActionCodeSettings, fetchSignInMethodsForEmail} from 'firebase/auth';
 
-import { auth, app } from '@/lib/firebase'; 
+import { auth, app, db } from '@/lib/firebase'; 
+
+import { type AppSettings } from '@/settings-page';
+
+import { doc, getDoc } from 'firebase/firestore';
+
+
+export interface UserProfile {
+  username?: string;
+  email?: string;
+  photoURL?: string;
+  interests?: string[];
+  education?: string[];
+}
 
 /*
 
@@ -20,6 +33,8 @@ interface AuthContextType {
   forgotPassword: (email: string) => Promise<void>
   setUser: React.Dispatch<React.SetStateAction<User | null>>;
   updateUserEmail: (password: string, newEmail: string) => Promise<void>;
+  userSettings: AppSettings | null;
+  userProfile: UserProfile | null;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -33,14 +48,32 @@ interface AuthProviderProps {
 export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [userSettings, setUserSettings] = useState<AppSettings | null>(null);
+
 
   useEffect(() => {
     const auth = getAuth(app);
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
+      if (currentUser) {
+        const [profileSnap, settingsSnap] = await Promise.all([
+          getDoc(doc(db, "users", currentUser.uid)),
+          getDoc(doc(db, "settings", currentUser.uid)) 
+        ]);
+        
+        if (profileSnap.exists()) {
+          setUserProfile(profileSnap.data() as UserProfile);
+        }
+        if (settingsSnap.exists()) {
+          setUserSettings(settingsSnap.data() as AppSettings);
+        }
+      } else {
+        setUserProfile(null);
+        setUserSettings(null);
+      }
       setLoading(false);
     });
-
     return () => unsubscribe();
   }, []);
 
@@ -67,7 +100,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const signInMethods = await fetchSignInMethodsForEmail(auth, newEmail);
     
 
-    console.log(`Checking if '${newEmail}' is taken. Methods found:`, signInMethods);
+    //console.log(`Checking if '${newEmail}' is taken. Methods found:`, signInMethods);
 
     if (signInMethods.length > 0) {
       throw { code: 'auth/email-already-in-use' };
@@ -85,7 +118,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   };
 
 
-  const value = { user, loading, logout, forgotPassword, setUser, updateUserEmail };
+  const value = { user, loading, logout, forgotPassword, setUser, updateUserEmail, userSettings, userProfile };
 
   return (
     <AuthContext.Provider value={value}>

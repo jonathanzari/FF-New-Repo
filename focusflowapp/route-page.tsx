@@ -1,24 +1,22 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import MainLayout from "@/app/MainLayout";
-import TimerPage from "@/app/TimerPage";
+import { useAuth } from "@/contexts/AuthContext";
+import { db } from '@/lib/firebase';
+import { collection, addDoc, serverTimestamp, query, orderBy, getDocs, doc, deleteDoc, updateDoc } from 'firebase/firestore';
+
+import MainLayout from "./app/MainLayout";
+import TimerPage from "./app/TimerPage";
 import SignInPage from "./sign-in-page";
+import ProfilePage from "./profile-page";
+import FriendsPage from "./friends-page";
+import AIAssistantPage from "./ai-assistant-page";
+import ForgotPasswordPage from "./forgot-password-page";
 import CalendarPage from "./calendar-page";
 import SettingsPage, { type AppSettings } from "./settings-page";
 import AnalysisPage from "./analysis-page";
-import ProfilePage from "./profile-page";
-import ForgotPasswordPage from "./forgot-password-page";
-import AIAssistantPage from "./ai-assistant-page";
-import FriendsPage from "./friends-page";
 import StudyGroupsPage from "./study-groups-page";
 
-/*
-
-Any settings being changed gets transferred over to the other pages
-
-
-*/
 
 const defaultSettings: AppSettings = {
   pomodoroDuration: 25,
@@ -39,20 +37,30 @@ const colorThemes = {
   orange: { primary: "#ea580c", secondary: "#fb923c", accent: "#fdba74" },
 };
 
+
+interface Task {
+  id: string;
+  text: string;
+  completed: boolean;
+}
+
 export default function Home() {
-  const [currentPage, setCurrentPage] = useState<string>("timer");
+  const { user, userSettings } = useAuth();
+  const [currentPage, setCurrentPage] = useState("timer");
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
-  const [studySessions, setStudySessions] = useState<any[]>([]);
   const currentTheme = colorThemes[settings.colorTheme];
 
   const [selectedMode, setSelectedMode] = useState("Pomodoro");
   const [isRunning, setIsRunning] = useState(false);
-
-  const [tasks, setTasks] = useState([{ id: 1, text: "Task #1", completed: false }]);
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [newTaskText, setNewTaskText] = useState("");
   const [showAddInput, setShowAddInput] = useState(false);
-
-  const audioElement = new Audio('/notification.mp3');
+  const [studySessions, setStudySessions] = useState<any[]>([]);
+  const [sessionCount, setSessionCount] = useState(0);
+  const [showNotification, setShowNotification] = useState(false);
+  const [timerStartTime, setTimerStartTime] = useState<number | null>(null);
+  
+  const [audioElement] = useState(() => typeof window !== "undefined" ? new Audio('/notification.mp3') : null);
 
   const modes = useMemo(() => ({
     Pomodoro: settings.pomodoroDuration * 60,
@@ -62,136 +70,208 @@ export default function Home() {
 
   const [timeLeft, setTimeLeft] = useState(modes.Pomodoro);
 
-  useEffect(() => {
-    if (!isRunning) {
-      setTimeLeft(modes[selectedMode as keyof typeof modes]);
-    }
-  }, [selectedMode, settings, modes]); 
 
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null;
     if (isRunning && timeLeft > 0) {
-      interval = setInterval(() => {
-        setTimeLeft(prev => prev - 1);
-      }, 1000);
+      interval = setInterval(() => setTimeLeft(prev => prev - 1), 1000);
     } else if (timeLeft === 0 && isRunning) {
       setIsRunning(false);
       completeSession();
     }
-    return () => {
-      if (interval) clearInterval(interval);
-    };
+    return () => { if (interval) clearInterval(interval); };
   }, [isRunning, timeLeft]);
 
-  const completeSession = () => {
-
-    var sessionCount = 0;
-
-    // Session is logged 
-    const session = {
-      id: Date.now(),
-      date: new Date().toISOString(),
-      type: selectedMode as "Pomodoro" | "Short Break" | "Long Break",
-      duration: modes[selectedMode as keyof typeof modes],
-      completed: true,
-    };
-    // Play notification sound
-    audioElement.currentTime = 0; // Reset audio to start
-    audioElement.volume = settings.soundVolume/100; // Adjust volume based on settings
-    audioElement.loop = false; // Play sound once
-    audioElement.play();
-
-    // Automatically switch to the next mode
-    // For every two pomodoros, switch to a long break, else switch to a short break
-    if (selectedMode === "Pomodoro" && sessionCount < 2) {
-      setSelectedMode("Short Break");
-    } else if (selectedMode === "Short Break" && sessionCount < 2) {
-      setSelectedMode("Pomodoro");
-      sessionCount++;
-    } else if (selectedMode === "Pomodoro" && sessionCount >= 2) {
-      setSelectedMode("Long Break");
-      sessionCount = 0; // Reset for next cycle
-    } else if (selectedMode === "Long Break" && sessionCount == 0) {
-      setSelectedMode("Pomodoro");
+  useEffect(() => {
+    if (user) loadTasks();
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      Notification.requestPermission();
     }
+    const savedTimerState = localStorage.getItem('timerState');
+    if (savedTimerState) {
+      const { isRunning, timeLeft, selectedMode, startTime } = JSON.parse(savedTimerState);
+      if (isRunning && startTime) {
+        const elapsed = Math.floor((Date.now() - startTime) / 1000);
+        const remaining = Math.max(0, timeLeft - elapsed);
+        if (remaining > 0) {
+          setSelectedMode(selectedMode);
+          setTimeLeft(remaining);
+          setIsRunning(true);
+          setTimerStartTime(startTime);
+          return;
+        }
+      }
+    }
+    setTimeLeft(modes[selectedMode as keyof typeof modes]);
+    localStorage.removeItem('timerState');
+  }, [user]);
 
-  };
-  
-  const handleModeChange = (mode: string) => {
-    setSelectedMode(mode);
-    setTimeLeft(modes[mode as keyof typeof modes]);
-    setIsRunning(false);
+  useEffect(() => {
+    if (!isRunning) {
+      setTimeLeft(modes[selectedMode as keyof typeof modes]);
+    }
+  }, [selectedMode, settings, modes]);
+
+  useEffect(() => {
+    if (user && userSettings) {
+      setSettings(userSettings);
+    } else {
+      setSettings(defaultSettings);
+      setTasks([]); 
+    }
+  }, [user, userSettings]);
+
+  const playNotificationSound = () => {
+    if (!audioElement || !settings.soundEnabled) return;
+    try {
+      audioElement.currentTime = 0;
+      audioElement.volume = settings.soundVolume / 100;
+      audioElement.play();
+    } catch (error) {
+      console.log('Could not play notification sound:', error);
+    }
   };
 
-  const toggleTimer = () => {
-    setIsRunning(!isRunning);
-  };
-
-  const handleSettingsChange = (newSettings: AppSettings) => {
-    setSettings(newSettings);
-    setIsRunning(false); // Stop timer when settings change
+  const showBrowserNotification = () => {
+    if (settings.notificationsEnabled && 'Notification' in window && Notification.permission === 'granted') {
+      const notification = new Notification('Timer Complete! 🎉', {
+        body: `${selectedMode} session has finished!`,
+        icon: '/FocusFlow.png',
+      });
+      notification.onclick = () => { window.focus(); notification.close(); };
+    }
   };
 
   const addStudySession = (session: any) => {
     setStudySessions(prevSessions => [...prevSessions, session]);
   };
 
-  const handleLoginSuccess = () => {
-    setCurrentPage("timer");
-  };
+  const completeSession = () => {
+    setShowNotification(true);
+    playNotificationSound();
+    showBrowserNotification();
+    setTimeout(() => setShowNotification(false), 5000);
+    
+    const session = {
+      id: Date.now(), date: new Date().toISOString(), type: selectedMode,
+      duration: modes[selectedMode as keyof typeof modes], completed: true,
+    };
+    addStudySession(session);
 
-  const deleteTask = (id: number) => setTasks(tasks.filter((task) => task.id !== id));
-  const toggleTask = (id: number) => setTasks(tasks.map((task) => (task.id === id ? { ...task, completed: !task.completed } : task)));
+    if (user) {
+      addDoc(collection(db, "users", user.uid, "timerSessions"), {
+        ...session, createdAt: serverTimestamp()
+      }).catch(error => console.error("Error saving session:", error));
+    }
 
-  const addTask = () => {
-    if (newTaskText.trim()) {
-      const newTask = {
-        id: Date.now(),
-        text: newTaskText.trim(),
-        completed: false,
-      };
-      setTasks([...tasks, newTask]);
-      setNewTaskText("");
-      setShowAddInput(false);
+    if (selectedMode === "Pomodoro") {
+      const newCount = sessionCount + 1;
+      setSessionCount(newCount);
+      handleModeChange(newCount % 4 === 0 ? "Long Break" : "Short Break");
+    } else {
+      handleModeChange("Pomodoro");
     }
   };
 
-  const showAddTaskInput = () => setShowAddInput(true);
-  const cancelAddTask = () => {
-    setNewTaskText("");
-    setShowAddInput(false);
+  const handleModeChange = (mode: string) => {
+    setIsRunning(false);
+    setSelectedMode(mode);
+    setTimerStartTime(null);
+    localStorage.removeItem('timerState');
   };
 
+  const toggleTimer = () => {
+    const newIsRunning = !isRunning;
+    if (newIsRunning && audioElement) {
+        audioElement.play().catch(() => {});
+        audioElement.pause();
+    }
+    setIsRunning(newIsRunning);
+    if (newIsRunning) {
+      const startTime = Date.now();
+      setTimerStartTime(startTime);
+      localStorage.setItem('timerState', JSON.stringify({
+        isRunning: true, timeLeft, selectedMode, startTime
+      }));
+    } else {
+      setTimerStartTime(null);
+      localStorage.removeItem('timerState');
+    }
+  };
+
+  const loadTasks = async () => {
+    if (!user) return;
+    const tasksQuery = query(collection(db, "users", user.uid, "timerTasks"), orderBy("createdAt", "desc"));
+    const querySnapshot = await getDocs(tasksQuery);
+    setTasks(querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Task)));
+  };
+
+  const addTask = async () => {
+    if (!user || !newTaskText.trim()) return;
+    const text = newTaskText.trim();
+    setNewTaskText("");
+    setShowAddInput(false);
+    await addDoc(collection(db, "users", user.uid, "timerTasks"), {
+      text: text, completed: false, createdAt: serverTimestamp()
+    });
+    await loadTasks();
+  };
+
+  const deleteTask = async (taskId: string) => {
+    if (!user) return;
+    await deleteDoc(doc(db, "users", user.uid, "timerTasks", taskId));
+    setTasks(prev => prev.filter(task => task.id !== taskId));
+  };
+  
+  const toggleTask = async (task: Task) => {
+    if (!user) return;
+    const newCompletedStatus = !task.completed;
+    await updateDoc(doc(db, "users", user.uid, "timerTasks", task.id), { completed: newCompletedStatus });
+    setTasks(prev => prev.map(t => t.id === task.id ? { ...t, completed: newCompletedStatus } : t));
+  };
+  
+  const showAddTaskInput = () => setShowAddInput(true);
+  const cancelAddTask = () => { setNewTaskText(""); setShowAddInput(false); };
+  const handleSettingsChange = (newSettings: AppSettings) => setSettings(newSettings);
+  const handleLoginSuccess = () => setCurrentPage("timer");
 
   if (currentPage === "log in") {
-    return (
-      <SignInPage 
-        onLoginSuccess={handleLoginSuccess}
-        onNavigateToForgotPassword={() => setCurrentPage("forgot-password")}
-      />
-    );
+    return <SignInPage onLoginSuccess={handleLoginSuccess} onNavigateToForgotPassword={() => setCurrentPage("forgot-password")} />;
   }
-
   if (currentPage === "forgot-password") {
-    return (
-      <ForgotPasswordPage
-        onNavigateToSignIn={() => setCurrentPage("log in")}
-      />
-    );
+    return <ForgotPasswordPage onNavigateToSignIn={() => setCurrentPage("log in")} />;
   }
-
-
 
   return (
     <MainLayout
-      onNavigate={setCurrentPage as any}
+      onNavigate={setCurrentPage}
       onSignInClick={() => setCurrentPage("log in")}
       theme={currentTheme}
     >
-      {/* All handlers and props have to be transferred to this page where it does NOT change, essentially keeps from the timer and created tasks from disappearing when going tab to tab */}
-
-      {currentPage === "timer" && <TimerPage settings={settings} currentTheme={currentTheme} onSessionComplete={() => {}} />}
-
+      {currentPage === "timer" && (
+        <TimerPage
+          timeLeft={timeLeft}
+          isRunning={isRunning}
+          selectedMode={selectedMode}
+          modes={modes}
+          toggleTimer={toggleTimer}
+          handleModeChange={handleModeChange}
+          tasks={tasks}
+          newTaskText={newTaskText}
+          showAddInput={showAddInput}
+          setNewTaskText={setNewTaskText}
+          addTask={addTask}
+          deleteTask={deleteTask}
+          toggleTask={toggleTask}
+          showAddTaskInput={showAddTaskInput}
+          cancelAddTask={cancelAddTask}
+          settings={settings}
+          currentTheme={currentTheme}
+          onSessionComplete={addStudySession}
+          showNotification={showNotification}
+          setShowNotification={setShowNotification}
+        />
+      )}
       {currentPage === "calendar" && <CalendarPage settings={settings} currentTheme={currentTheme}/>}
       {currentPage === "analysis" && <AnalysisPage settings={settings} currentTheme={currentTheme} />}
       {currentPage === "settings" && <SettingsPage settings={settings} onSettingsChange={handleSettingsChange} />}
@@ -199,6 +279,7 @@ export default function Home() {
       {currentPage === "ai-assistant" && <AIAssistantPage /> }
       {currentPage === "friends" && <FriendsPage /> }
       {currentPage === "study-groups" && <StudyGroupsPage settings={settings} currentTheme={currentTheme} />}
+
     </MainLayout>
   );
 }

@@ -79,75 +79,50 @@ const colorThemes = {
   },
 }
 
-export default function SettingsPage({
-  settings = defaultSettings,
-  onSettingsChange,
-}: SettingsPageProps) {
+export default function SettingsPage({ settings, onSettingsChange }: SettingsPageProps) {
   const { user } = useAuth();
-  const [localSettings, setLocalSettings] = useState<AppSettings>(settings)
-  const [hasChanges, setHasChanges] = useState(false)
-  const [loading, setLoading] = useState(false)
+  const [localSettings, setLocalSettings] = useState<AppSettings>(settings ?? defaultSettings);
+  const [hasChanges, setHasChanges] = useState(false);
 
-  // Load settings from Firebase on component mount
+  // This effect keeps the local state in sync with the global state from props
   useEffect(() => {
-    if (user) {
-      loadSettings();
-    }
-  }, [user]);
-
-  const loadSettings = async () => {
-    if (!user) return;
-    
-    try {
-      setLoading(true);
-      const userDoc = await getDoc(doc(db, "users", user.uid));
-      if (userDoc.exists() && userDoc.data().settings) {
-        const savedSettings = userDoc.data().settings;
-        setLocalSettings({ ...defaultSettings, ...savedSettings });
-        onSettingsChange?.({ ...defaultSettings, ...savedSettings });
-      }
-    } catch (error) {
-      console.error("Error loading settings:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const saveSettingsToFirebase = async (settings: AppSettings) => {
-    if (!user) return;
-    
-    try {
-      await setDoc(doc(db, "users", user.uid), {
-        settings: settings
-      }, { merge: true });
-    } catch (error) {
-      console.error("Error saving settings:", error);
-    }
-  };
+    setLocalSettings(settings ?? defaultSettings);
+  }, [settings]);
 
   const updateSetting = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
-    const newSettings = { ...localSettings, [key]: value }
-    setLocalSettings(newSettings)
-    setHasChanges(true)
-  }
+    setLocalSettings(prev => ({ ...prev, [key]: value }));
+    setHasChanges(true);
+  };
 
-  const saveSettings = async () => {
-    onSettingsChange?.(localSettings)
-    
-    // Save to Firebase if user is logged in
-    if (user) {
-      await saveSettingsToFirebase(localSettings);
+  // This is the single, correct function to save settings
+  const handleSave = async () => {
+    if (!user) {
+      alert("You must be logged in to save settings.");
+      return;
     }
     
-    setHasChanges(false)
-  }
+    try {
+      // Save the new settings to a 'settings' collection with the user's ID
+      const settingsDocRef = doc(db, "settings", user.uid);
+      await setDoc(settingsDocRef, localSettings, { merge: true });
+      
+      // Call the parent's handler to update the global state instantly
+      if (onSettingsChange) {
+        onSettingsChange(localSettings);
+      }
+      
+      setHasChanges(false);
+    } catch (error) {
+      console.error("Failed to save settings:", error);
+    }
+  };
 
   const resetSettings = () => {
-    setLocalSettings(defaultSettings)
-    setHasChanges(true)
-  }
+    setLocalSettings(defaultSettings);
+    setHasChanges(true);
+  };
 
-  const currentTheme = colorThemes[localSettings.colorTheme]
+  const currentTheme = colorThemes[localSettings.colorTheme];
 
   return (
     <div
@@ -176,7 +151,7 @@ export default function SettingsPage({
                   <Button onClick={resetSettings} variant="outline" size="sm">
                     Reset to Default
                   </Button>
-                  <Button onClick={saveSettings} size="sm">
+                  <Button onClick={handleSave} size="sm">
                     <Save className="w-4 h-4 mr-2" />
                     Save Changes
                   </Button>

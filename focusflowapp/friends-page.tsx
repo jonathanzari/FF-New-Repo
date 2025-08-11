@@ -339,7 +339,7 @@ export default function FriendsPage(
             <div className = "max-w-4xl mx-auto space-y-6">
                                  <div className="text-center mb-8">
                      <h1 className="text-3xl font-bold text-white mb-2">Friends</h1>
-                     <p className = "text-white/80">Connect with colleagues and other like-minded people surrounding <br/> your topic of interest, form study groups, and create study sessions! </p>                    
+                     <p className = "text-white/80">Connect with colleagues and other like-minded people surrounding <br/> your topics of interest! </p>                    
                  </div>
                     {user ? (
                         <div>
@@ -376,7 +376,7 @@ export default function FriendsPage(
                                             {requests.length === 0 ? (
                                             <p className="text-sm text-center text-gray-500 mt-4">No new requests.</p>
                                             ) : (
-                                            <div className="space-y-4 overflow-y-auto">
+                                            <div className="space-y-4 overflow-y-auto h-60">
                                             {requests.map((request) => (
                                             <div 
                                             key={`request-${request.userId}`} 
@@ -428,9 +428,11 @@ export default function FriendsPage(
                                             ))}
                                           </div>
                                           
-                                          <CardTitle className="text-center">Friends</CardTitle>
-                                            <div className="space-y-4 overflow-y-auto h-50 mb-2">
-                                            {friends.map((friend) => (
+                                          
+                                          <CardTitle className="text-center mb-4">Friends</CardTitle>
+
+                                          <div className="space-y-4 overflow-y-auto h-65 mb-2">
+                                          {friends.map((friend) => (
                                             <div 
                                             key={`friend-${friend.userId}`} 
                                             className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-100 overflow-y-auto"
@@ -450,8 +452,9 @@ export default function FriendsPage(
                                                 Remove
                                               </Button>
                                             </div>
-                                            ))}
+                                              ))}
                                           </div>
+                                          
                                         </CardContent>
                                     </Card>
 
