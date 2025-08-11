@@ -1,33 +1,40 @@
 // app/api/users/suggested/route.ts
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import driver from '@/lib/neo4j';
 
-export async function POST(request: Request) {
-  const { currentUserId } = await request.json();
-  if (!currentUserId) {
-    return NextResponse.json({ message: 'User ID is required.' }, { status: 400 });
-  }
-
+export async function POST(request: NextRequest) {
   const session = driver.session();
+  
   try {
-    // This query finds users (u2) that the current user (u1) is not
-    // connected to by any friendship or request relationship.
-    const query = `
-      MATCH (u1:User {userId: $currentUserId})
-      MATCH (u2:User)
-      WHERE u1 <> u2 AND NOT (u1)-[]-(u2)
-      RETURN u2.userId AS userId, u2.username AS username
-      LIMIT 10
-    `;
-    const result = await session.run(query, { currentUserId });
-    const suggestions = result.records.map(record => ({
+    const { currentUserId, currentUsername } = await request.json();
+
+    // Ensure current user exists in Neo4j
+    await session.run(
+      `MERGE (u:User {userId: $currentUserId}) SET u.username = $currentUsername`,
+      { currentUserId, currentUsername }
+    );
+
+    // Get suggested users (users who are not friends and not the current user)
+    const result = await session.run(
+      `MATCH (u:User)
+       WHERE u.userId <> $currentUserId
+       AND NOT EXISTS((u)-[:IS_FRIENDS_WITH]-(:User {userId: $currentUserId}))
+       AND NOT EXISTS((u)-[:SENT_REQUEST]-(:User {userId: $currentUserId}))
+       AND NOT EXISTS((:User {userId: $currentUserId})-[:SENT_REQUEST]-(u))
+       RETURN DISTINCT u.userId as userId, u.username as username
+       LIMIT 10`,
+      { currentUserId }
+    );
+
+    const suggestedUsers = result.records.map(record => ({
       userId: record.get('userId'),
-      username: record.get('username'),
+      username: record.get('username')
     }));
 
-    return NextResponse.json(suggestions);
+    return NextResponse.json(suggestedUsers);
   } catch (error) {
-    return NextResponse.json({ message: 'An error occurred.' }, { status: 500 });
+    console.error('Error fetching suggested users:', error);
+    return NextResponse.json([]);
   } finally {
     await session.close();
   }

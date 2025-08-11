@@ -314,7 +314,7 @@ export default function AIAssistantPage() {
                 <div>
                     <div className = "flex justify-center gap-6 p-4">
                         <Card className="flex flex-col flex-shrink-0 shadow-lg bg-white border border-gray-200" style={{ height: 575, maxHeight: '100vh', width: 450, maxWidth: '90vh' }}>
-                            <div className="flex items-center justify-between px-6 py-7 border-b bg-gradient-to-r from-blue-500 to-purple-600 rounded-t-2xl -mt-6">
+                            <div className="flex items-center justify-between px-6 py-7 border-b bg-gradient-to-r from-blue-500 to-black rounded-t-2xl -mt-6">
                                 <div className="flex items-center gap-2 text-white">
                                     <Bot className="w-5 h-5" />
                                     <h2 className="font-semibold text-lg">AI Study Assistant</h2>

@@ -95,6 +95,7 @@ export default function StudyGroupsPage({ settings, currentTheme }: StudyGroupsP
         id: doc.id,
         ...doc.data()
       })) as StudyGroup[];
+      
       // Sort by updatedAt in JavaScript instead of Firestore
       groupsData.sort((a, b) => {
         const aTime = a.updatedAt?.toDate?.() || new Date(0);
@@ -249,13 +250,19 @@ export default function StudyGroupsPage({ settings, currentTheme }: StudyGroupsP
         })
       });
 
+      const result = await response.json();
+      
       if (response.ok) {
+        alert(result.message);
         setIsInviteDialogOpen(false);
         setInviteEmail('');
         setSelectedGroupForInvite(null);
+      } else {
+        alert('Error: ' + result.error);
       }
     } catch (error) {
-      console.error('Error inviting user:', error);
+      console.error('Error adding user to group:', error);
+      alert('Failed to add user to group');
     } finally {
       setLoading(false);
     }
@@ -337,6 +344,7 @@ export default function StudyGroupsPage({ settings, currentTheme }: StudyGroupsP
                               setSelectedGroupForInvite(group);
                               setIsInviteDialogOpen(true);
                             }}
+                            title="Add User to Group"
                           >
                             <UserPlus className="w-4 h-4" />
                           </Button>
@@ -481,30 +489,30 @@ export default function StudyGroupsPage({ settings, currentTheme }: StudyGroupsP
           </DialogContent>
         </Dialog>
 
-        {/* Invite to Group Dialog */}
+        {/* Add User to Group Dialog */}
         <Dialog open={isInviteDialogOpen} onOpenChange={setIsInviteDialogOpen}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <DialogTitle>Invite to Study Group</DialogTitle>
+              <DialogTitle>Add User to Study Group</DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
               <div>
-                <Label htmlFor="invite-email">Friend's Email</Label>
+                <Label htmlFor="invite-email">User's Email</Label>
                 <Input
                   id="invite-email"
                   type="email"
                   value={inviteEmail}
                   onChange={(e) => setInviteEmail(e.target.value)}
-                  placeholder="Enter friend's email address..."
+                  placeholder="Enter user's email address..."
                 />
               </div>
               <div className="text-sm text-gray-600">
-                <p>Inviting to: <strong>{selectedGroupForInvite?.name}</strong></p>
-                <p className="mt-1">Your friend will receive an invitation to join this study group.</p>
+                <p>Adding to: <strong>{selectedGroupForInvite?.name}</strong></p>
+                <p className="mt-1">The user will be immediately added to the group and can access the chat.</p>
               </div>
               <div className="flex gap-2 pt-4">
                 <Button onClick={inviteToGroup} disabled={loading || !inviteEmail.trim()} className="flex-1">
-                  {loading ? 'Sending...' : 'Send Invitation'}
+                  {loading ? 'Adding...' : 'Add User'}
                 </Button>
                 <Button onClick={() => {
                   setIsInviteDialogOpen(false);

@@ -5,10 +5,10 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useAuth } from "@/contexts/AuthContext";
 import { db } from '@/lib/firebase';
-import { doc, getDoc, collection, query, where, onSnapshot } from "firebase/firestore";
+import { doc, getDoc, collection, query, where, onSnapshot, updateDoc } from "firebase/firestore";
 import { Badge } from '@/components/ui/badge';
 import { Button } from "@/components/ui/button";
-import { UserPlus, UserCheck, User, Users, Lock, Globe, MessageCircle } from 'lucide-react';
+import { UserPlus, UserCheck, User, Users, Lock, Globe, UserMinus } from 'lucide-react';
 
 
 
@@ -113,7 +113,10 @@ interface AuthUser {
     uid: string;
     displayName?: string;
     photoURL?: string;
+    email?: string;
 }
+
+
 
 export default function FriendsPage(
 ){
@@ -127,7 +130,8 @@ export default function FriendsPage(
     const [studyGroups, setStudyGroups] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
 
-    
+
+
       useEffect(() => {
         const fetchUserData = async () => {
           if (user) {
@@ -149,14 +153,29 @@ export default function FriendsPage(
             const response = await fetch('/api/users/suggested', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ currentUserId: user.uid }),
+              body: JSON.stringify({ 
+                currentUserId: user.uid,
+                currentUsername: user.displayName || 'Unknown User'
+              }),
             });
+            
+            if (!response.ok) {
+              throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
             const data = await response.json();
-            setSuggestedUsers(data);
+            // Filter out any duplicate users by userId to prevent React key conflicts
+            const uniqueUsers = data.filter((user: any, index: number, self: any[]) => 
+              index === self.findIndex((u: any) => u.userId === user.userId)
+            );
+            setSuggestedUsers(uniqueUsers);
           } catch (error) {
             console.error("Failed to display suggestions:", error);
+            // Set empty array to prevent UI issues
+            setSuggestedUsers([]);
+          } finally {
+            setLoading(false);
           }
-          setLoading(false);
         };
         fetchSuggestedUsers();
 
@@ -166,12 +185,26 @@ export default function FriendsPage(
             const response = await fetch('/api/friends/pending-requests', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ currentUserId: user.uid }),
+              body: JSON.stringify({ 
+                currentUserId: user.uid,
+                currentUsername: user.displayName || 'Unknown User'
+              }),
             });
+            
+            if (!response.ok) {
+              throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
             const data = await response.json();
-            setRequests(data);
+            // Filter out any duplicate users by userId to prevent React key conflicts
+            const uniqueRequests = data.filter((user: any, index: number, self: any[]) => 
+              index === self.findIndex((u: any) => u.userId === user.userId)
+            );
+            setRequests(uniqueRequests);
         } catch (error) {
             console.error("Failed to fetch friend requests:", error);
+            // Set empty array to prevent UI issues
+            setRequests([]);
         }
         };
         fetchFriendRequests();
@@ -182,12 +215,26 @@ export default function FriendsPage(
             const response = await fetch('/api/friends', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ currentUserId: user.uid }),
+                body: JSON.stringify({ 
+                  currentUserId: user.uid,
+                  currentUsername: user.displayName || 'Unknown User'
+                }),
             });
+            
+            if (!response.ok) {
+              throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
             const data = await response.json();
-            setFriends(data);
+            // Filter out any duplicate users by userId to prevent React key conflicts
+            const uniqueFriends = data.filter((user: any, index: number, self: any[]) => 
+              index === self.findIndex((u: any) => u.userId === user.userId)
+            );
+            setFriends(uniqueFriends);
         } catch (error) {
-            console.error("Failed to fetch friends:", error);   
+            console.error("Failed to fetch friends:", error);
+            // Set empty array to prevent UI issues
+            setFriends([]);
         }
         };
         fetchFriends();
@@ -217,7 +264,7 @@ export default function FriendsPage(
       }, [user]);
 
 
-    const handleSendRequest = async (targetUserId: string) => {
+    const handleSendRequest = async (targetUserId: string, targetUsername: string) => {
     if (!user) return;
     try {
       await fetch('/api/friends/request', {
@@ -226,6 +273,7 @@ export default function FriendsPage(
         body: JSON.stringify({
           currentUserId: user.uid,
           targetUserId: targetUserId,
+          targetUsername: targetUsername,
         }),
       });
 
@@ -243,6 +291,7 @@ export default function FriendsPage(
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           currentUserId: user.uid,
+          currentUsername: user.displayName || 'Unknown User',
           requestUserId: requestUserId,
         }),
       });
@@ -252,16 +301,36 @@ export default function FriendsPage(
     }
   };
 
+  const handleDeleteFriend = async (friendUserId: string) => {
+    if (!user) return;
+    try {
+      await fetch('/api/friends/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          currentUserId: user.uid,
+          friendUserId: friendUserId,
+        }),
+      });
+      
+      // Remove the friend from the local state
+      setFriends(prev => prev.filter(friend => friend.userId !== friendUserId));
+    } catch (error) {
+      console.error("Failed to delete friend:", error);
+    }
+  };
+
+
 
 
     return(
     
         <div className= "min-h-screen p-6">
             <div className = "max-w-4xl mx-auto space-y-6">
-                <div className="text-center mb-8">
-                    <h1 className="text-3xl font-bold text-white mb-2">Friends</h1>
-                    <p className = "text-white/80">Connect with colleagues and other like-minded people surrounding <br/> your topic of interest, form study groups, and create study sessions! </p>                    
-                </div>
+                                 <div className="text-center mb-8">
+                     <h1 className="text-3xl font-bold text-white mb-2">Friends</h1>
+                     <p className = "text-white/80">Connect with colleagues and other like-minded people surrounding <br/> your topic of interest, form study groups, and create study sessions! </p>                    
+                 </div>
                     {user ? (
                         <div>
                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-4">
@@ -299,7 +368,7 @@ export default function FriendsPage(
                                             ) : (
                                             <div className="space-y-4 overflow-y-auto">
                                             {requests.map((request) => (
-                                                <div key={request.userId} className="flex items-center justify-between mt-4">
+                                                <div key={`request-${request.userId}`} className="flex items-center justify-between mt-4">
                                                     <span>{request.username}</span>
                                                     <Button size="sm" onClick={() => handleAcceptRequest(request.userId)}>
                                                         <UserCheck className="w-4 h-4 mr-2" />
@@ -325,21 +394,30 @@ export default function FriendsPage(
                                           <div className="space-y-4 overflow-y-auto">
                                             {loading && <p className="text-center text-gray-500">Loading suggestions...</p>}
                                             {suggestedUsers.map((suggestedUser) => (
-                                              <div key={suggestedUser.userId} className="flex items-center justify-between">
+                                              <div key={`suggested-${suggestedUser.userId}`} className="flex items-center justify-between">
                                                 <span>{suggestedUser.username}</span>
-                                                <Button size="sm" onClick={() => handleSendRequest(suggestedUser.userId)}>
-                                                  <UserPlus className="w-4 h-4 mr-2" />
-                                                  Add Friend
-                                                </Button>
+                                                                                                 <Button size="sm" onClick={() => handleSendRequest(suggestedUser.userId, suggestedUser.username)}>
+                                                   <UserPlus className="w-4 h-4 mr-2" />
+                                                   Add Friend
+                                                 </Button>
                                               </div>
                                             ))}
                                             <CardTitle className="text-center">Friends</CardTitle>
                                             {friends.map((friend) => (
-                                            <div key={friend.userId} className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-100 overflow-y-auto">
+                                            <div key={`friend-${friend.userId}`} className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-100 overflow-y-auto">
                                             <div className="flex items-center gap-4">
                                             <Avatar src={friend.photoURL} alt={friend.username} />
                                             <span className="font-medium">{friend.username}</span>
                                             </div>
+                                            <Button 
+                                              size="sm" 
+                                              variant="outline" 
+                                              onClick={() => handleDeleteFriend(friend.userId)}
+                                              className="text-red-600 border-red-300 hover:bg-red-50"
+                                            >
+                                              <UserMinus className="w-4 h-4 mr-2" />
+                                              Remove
+                                            </Button>
                                             </div>
                                         ))}
                                           </div>
@@ -348,42 +426,44 @@ export default function FriendsPage(
 
                                 </div>
                             </div>
-                            <Card className = "bg-white border-0 shadow-lg">
-                                    <CardHeader>
-                                        <CardTitle className = "text-center">
-                                            Existing Study Groups
-                                        </CardTitle>
-                                    </CardHeader>
-                                    <CardContent>
-                                      {studyGroups.length === 0 ? (
-                                        <div className="text-center py-4">
-                                          <Users className="w-12 h-12 text-gray-300 mx-auto mb-2" />
-                                          <p className="text-gray-500 text-sm">No study groups yet</p>
-                                        </div>
-                                      ) : (
-                                        <div className="space-y-3">
-                                          {studyGroups.map((group) => (
-                                            <div key={group.id} className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
-                                              <div className="flex items-center gap-2">
-                                                {group.isPrivate ? (
-                                                  <Lock className="w-4 h-4 text-orange-500" />
-                                                ) : (
-                                                  <Globe className="w-4 h-4 text-blue-500" />
-                                                )}
-                                                <div>
-                                                  <p className="font-medium text-sm">{group.name}</p>
-                                                  <p className="text-xs text-gray-500">{group.memberCount} members</p>
-                                                </div>
-                                              </div>
-                                              <Badge variant="secondary" className="text-xs">
-                                                {group.hostId === user?.uid ? 'Host' : 'Member'}
-                                              </Badge>
-                                            </div>
-                                          ))}
-                                        </div>
-                                      )}
-                                    </CardContent>
-                            </Card>
+                                                         <Card className = "bg-white border-0 shadow-lg">
+                                     <CardHeader>
+                                         <CardTitle className = "text-center">
+                                             Existing Study Groups
+                                         </CardTitle>
+                                     </CardHeader>
+                                     <CardContent>
+                                       {studyGroups.length === 0 ? (
+                                         <div className="text-center py-4">
+                                           <Users className="w-12 h-12 text-gray-300 mx-auto mb-2" />
+                                           <p className="text-gray-500 text-sm">No study groups yet</p>
+                                         </div>
+                                       ) : (
+                                         <div className="space-y-3">
+                                           {studyGroups.map((group) => (
+                                             <div key={group.id} className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
+                                               <div className="flex items-center gap-2">
+                                                 {group.isPrivate ? (
+                                                   <Lock className="w-4 h-4 text-orange-500" />
+                                                 ) : (
+                                                   <Globe className="w-4 h-4 text-blue-500" />
+                                                 )}
+                                                 <div>
+                                                   <p className="font-medium text-sm">{group.name}</p>
+                                                   <p className="text-xs text-gray-500">{group.memberCount} members</p>
+                                                 </div>
+                                               </div>
+                                               <Badge variant="secondary" className="text-xs">
+                                                 {group.hostId === user?.uid ? 'Host' : 'Member'}
+                                               </Badge>
+                                             </div>
+                                           ))}
+                                         </div>
+                                       )}
+                                     </CardContent>
+                             </Card>
+
+                             
                         </div>
                     ) : (
                         <div>
