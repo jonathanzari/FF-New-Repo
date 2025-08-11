@@ -43,7 +43,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, serverTimestamp, query, orderBy, getDocs, updateDoc, doc, deleteDoc } from 'firebase/firestore';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { FolderPlus, Send, Bot, User, History, Plus, X, Pencil, Trash } from 'lucide-react';
+import { FolderPlus, Send, Bot, User, History, Plus, X, Pencil, Trash, Brain } from 'lucide-react';
 
 
 interface Note {
@@ -229,6 +229,10 @@ export default function AIAssistantPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleAskAI = (noteContent: string) => {
+    sendMessage(noteContent);
   };
 
   const filteredNotes = useMemo(() => {
@@ -510,15 +514,21 @@ export default function AIAssistantPage() {
                                           <Button 
                                           variant="secondary"
                                           onClick={() => handleEditNote(note)}
-                                          className="w-1/3 mr-2"
+                                          className="mr-2"
                                           >
                                             <Pencil className="w-5 h-5"/> Edit Note
                                           </Button>
                                           <Button
                                           onClick={() => handleDeleteNote(note.id)}
-                                          className="w-1/3"
+                                          className="bg-red-500 mr-2 hover:bg-red-500/60"
                                           >
                                             <Trash className="w-5 h-5"/> Delete Note
+                                          </Button>
+                                          <Button
+                                          onClick={() => handleAskAI(note.content + " \n\n Simplify and explain this")}
+                                          className="bg-gradient-to-r from-blue-500 to-black hover:opacity-80"
+                                          >
+                                            <Brain className="w-5 h-5"/> Ask AI
                                           </Button>
                                         </div>
                                     </Card>
