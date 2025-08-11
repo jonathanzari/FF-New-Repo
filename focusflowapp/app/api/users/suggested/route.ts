@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
       `MATCH (u:User)
        WHERE u.userId <> $currentUserId
        AND NOT EXISTS((u)-[:IS_FRIENDS_WITH]-(:User {userId: $currentUserId}))
-       AND NOT EXISTS((u)-[:SENT_REQUEST]-(:User {userId: $currentUserId}))
+       AND NOT EXISTS((u)-[:SENT_REQUEST_TO]-(:User {userId: $currentUserId}))
        AND NOT EXISTS((:User {userId: $currentUserId})-[:SENT_REQUEST]-(u))
        RETURN DISTINCT u.userId as userId, u.username as username
        LIMIT 10`,

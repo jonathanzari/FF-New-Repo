@@ -309,7 +309,7 @@ export default function AIAssistantPage() {
             <div className="max-w-4xl mx-auto space-y-6">
               <div className="text-center mb-8">
                 <h1 className="text-3xl font-bold text-white mb-2">AI Assistant</h1>
-                <p className = "text-white/80">Combine simple note-taking with our Gemini-powered AI for faster and clearer understanding of any topic!</p>                    
+                <p className = "text-white/80">Combine simple note-taking with our OpenAI-powered assistant for faster and clearer understanding of any topic!</p>                    
               </div>
 
             { /* User is signed in, display notes & AI, if not, display simple card telling the person to sign in to utilize the tools */}

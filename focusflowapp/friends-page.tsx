@@ -409,12 +409,12 @@ export default function FriendsPage(
                                         </CardHeader>
 
                                         <CardContent>
-                                          <div className="space-y-4">
+                                          <div className="space-y-4 overflow-y-auto h-50 mb-2">
                                             {loading && <p className="text-center text-gray-500">Loading suggestions...</p>}
                                             {suggestedUsers.map((suggestedUser) => (
                                               <div 
                                               key={`suggested-${suggestedUser.userId}`} 
-                                              className="flex items-center justify-between overflow-y-auto"
+                                              className="flex items-center justify-between"
                                               >
                                                 <span 
                                                 className="p-2 rounded-lg hover:bg-gray-100"
@@ -426,9 +426,10 @@ export default function FriendsPage(
                                                  </Button>
                                               </div>
                                             ))}
-
-                                            <CardTitle className="text-center">Friends</CardTitle>
-
+                                          </div>
+                                          
+                                          <CardTitle className="text-center">Friends</CardTitle>
+                                            <div className="space-y-4 overflow-y-auto h-50 mb-2">
                                             {friends.map((friend) => (
                                             <div 
                                             key={`friend-${friend.userId}`} 

@@ -66,10 +66,10 @@ const colorThemes = {
     accent: "#6b9b37",
   },
   purple: {
-    name: "Black",
-    primary: "#000000",
-    secondary: "#1a1a1a",
-    accent: "#333333",
+    name: "Royal Purple",
+    primary: "#6b46c1",
+    secondary: "#8b5cf6",
+    accent: "#a78bfa",
   },
   orange: {
     name: "Sunset Orange",
