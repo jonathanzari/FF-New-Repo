@@ -275,7 +275,7 @@ export default function Home() {
       {currentPage === "calendar" && <CalendarPage settings={settings} currentTheme={currentTheme}/>}
       {currentPage === "analysis" && <AnalysisPage settings={settings} currentTheme={currentTheme} />}
       {currentPage === "settings" && <SettingsPage settings={settings} onSettingsChange={handleSettingsChange} />}
-      {currentPage === "profile" && <ProfilePage onNavigate = {setCurrentPage as any} />}
+      {currentPage === "profile" && <ProfilePage/>}
       {currentPage === "ai-assistant" && <AIAssistantPage /> }
       {currentPage === "friends" && <FriendsPage /> }
       {currentPage === "study-groups" && <StudyGroupsPage settings={settings} currentTheme={currentTheme} />}

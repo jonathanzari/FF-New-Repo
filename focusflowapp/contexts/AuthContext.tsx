@@ -100,7 +100,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const signInMethods = await fetchSignInMethodsForEmail(auth, newEmail);
     
 
-    //console.log(`Checking if '${newEmail}' is taken. Methods found:`, signInMethods);
+    console.log(`Checking if '${newEmail}' is taken. Methods found:`, signInMethods);
 
     if (signInMethods.length > 0) {
       throw { code: 'auth/email-already-in-use' };

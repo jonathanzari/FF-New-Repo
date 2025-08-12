@@ -52,7 +52,7 @@ interface ProfilePageProps {
 }
 
 export default function ProfilePage({ onNavigate }: ProfilePageProps) {
-  const { user, setUser, updateUserEmail } = useAuth();
+  const { user, userProfile, userSettings, setUser, updateUserEmail } = useAuth();
 
   const [newEmail, setNewEmail] = useState('');
   const [currentPassword, setCurrentPassword] = useState('');
@@ -80,19 +80,11 @@ export default function ProfilePage({ onNavigate }: ProfilePageProps) {
   const [studyGroups, setStudyGroups] = useState<any[]>([]);
 
   useEffect(() => {
-    const fetchUserData = async () => {
-      if (user) {
-        const userDocRef = doc(db, "users", user.uid);
-        const docSnap = await getDoc(userDocRef);
-        if (docSnap.exists()) {
-          const data = docSnap.data();
-          setSelectedInterests(data.interests || []);
-          setEducationLevel(data.education || '');
-        }
-      }
-    };
-    fetchUserData();
-  }, [user]);
+    if (userProfile) {
+      setSelectedInterests(userProfile.interests || []);
+      setEducationLevel(typeof userProfile.education === 'string' ? userProfile.education : '');
+    }
+  }, [userProfile]);
 
   // Load user's study groups
   useEffect(() => {
@@ -319,6 +311,8 @@ export default function ProfilePage({ onNavigate }: ProfilePageProps) {
   const handleEraseAccount = async () => {
 
   };
+
+  
 
 
 
